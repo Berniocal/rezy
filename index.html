@@ -3,7 +3,17 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>3D řezy těles – verze 1</title>
+  <title>3D řezy těles – verze 1.1</title>
+
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.164.1/build/three.module.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.164.1/examples/jsm/"
+    }
+  }
+  </script>
+
   <style>
     :root{
       --bg:#f3f6f8; --panel:#ffffff; --text:#1f2937; --muted:#6b7280;
@@ -19,24 +29,56 @@
     label{display:block;font-weight:650;font-size:14px;margin:14px 0 6px}
     select,input{width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:12px;font-size:15px;background:#fff}
     button{border:0;border-radius:14px;padding:11px 12px;font-weight:700;cursor:pointer}
-    .row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
     .primary{background:var(--blue);color:white;width:100%;margin-top:14px}
     .ghost{background:#eef5fb;color:#15527f;width:100%;margin-top:10px}
     .danger{background:#fee2e2;color:#991b1b;width:100%;margin-top:10px}
+    .stepPanel{margin-top:12px;background:#f8fafc;border:1px solid var(--line);border-radius:16px;padding:12px}
+    .stepTitle{font-weight:800;font-size:14px;margin-bottom:8px;color:#15527f}
+    .stepControls{display:grid;grid-template-columns:44px 1fr 44px;gap:8px;align-items:center}
+    .stepControls button{background:#eef5fb;color:#15527f;border:1px solid #d5e6f3;padding:10px 0}
+    .stepControls button:disabled{opacity:.45;cursor:not-allowed}
+    .stepText{text-align:center;font-size:13px;font-weight:700;color:var(--text);line-height:1.3}
+    .drawPanel{margin-top:12px;background:#f8fafc;border:1px solid var(--line);border-radius:16px;padding:12px}
+    .drawPanel .drawStatus{font-size:13px;color:var(--muted);line-height:1.35;margin-top:8px}
+    .drawOn{background:#fef3c7!important;color:#92400e!important;border:1px solid #f59e0b!important}
     .help{font-size:13px;color:var(--muted);line-height:1.45;background:#f8fafc;border:1px solid var(--line);padding:12px;border-radius:14px;margin-top:14px}
+    .seg{display:grid;grid-template-columns:1fr;gap:7px;margin-top:8px}
+    .seg button{background:#eef5fb;color:#15527f;border:1px solid #d5e6f3}
+    .seg button.active{background:#2b83c6;color:white;border-color:#2b83c6}
     .pts{display:grid;gap:8px;margin-top:8px}
     .pt{display:grid;grid-template-columns:28px 1fr;align-items:center;gap:8px}
+    .coordGrid{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+    .coordBox{display:grid;gap:3px}
+    .coordBox span{font-size:12px;font-weight:700;color:var(--muted);text-align:center}
+    .coordBox input{text-align:center;padding:9px 7px}
     .badge{height:28px;width:28px;border-radius:999px;background:#e0f2fe;color:#075985;display:grid;place-items:center;font-weight:800}
     #view{position:absolute;inset:0}
-    .topbar{position:absolute;left:18px;right:18px;top:18px;display:flex;gap:10px;align-items:center;pointer-events:none}
+    .topbar{position:absolute;left:18px;right:150px;top:18px;display:flex;gap:10px;align-items:center;pointer-events:none}
     .pill{pointer-events:auto;background:rgba(255,255,255,.9);backdrop-filter:blur(8px);border:1px solid var(--line);border-radius:999px;padding:9px 13px;font-size:14px;box-shadow:0 8px 30px rgba(0,0,0,.06)}
     .status{font-weight:700;color:#15527f}
-    .note{position:absolute;left:18px;bottom:18px;max-width:560px;background:rgba(255,255,255,.92);border:1px solid var(--line);border-radius:18px;padding:14px 16px;line-height:1.45;box-shadow:0 10px 35px rgba(0,0,0,.08)}
+    .note{position:absolute;left:18px;bottom:18px;max-width:610px;background:rgba(255,255,255,.92);border:1px solid var(--line);border-radius:18px;padding:14px 16px;line-height:1.45;box-shadow:0 10px 35px rgba(0,0,0,.08)}
     code{background:#eef2f7;padding:1px 5px;border-radius:7px}
+
+    .viewCube{
+      position:absolute;right:18px;top:18px;width:112px;height:112px;
+      background:rgba(255,255,255,.9);border:1px solid var(--line);border-radius:22px;
+      box-shadow:0 12px 35px rgba(0,0,0,.08);display:grid;place-items:center;
+      user-select:none;z-index:4;
+    }
+    .cubeGrid{display:grid;grid-template-columns:32px 32px 32px;grid-template-rows:32px 32px 32px;gap:3px}
+    .cubeBtn{
+      width:32px;height:32px;border-radius:10px;background:#eaf3fb;color:#15527f;
+      display:grid;place-items:center;font-size:12px;font-weight:800;cursor:pointer;border:1px solid #d5e6f3;
+    }
+    .cubeBtn:hover{background:#d8edf9}
+    .cubeBtn.iso{background:#2b83c6;color:white}
+    .empty{width:32px;height:32px}
     @media(max-width:850px){
       .app{grid-template-columns:1fr}
       aside{border-right:0;border-bottom:1px solid var(--line)}
-      main{height:70vh;min-height:520px}
+      main{height:70vh;min-height:540px}
+      .topbar{right:140px}
+      .note{right:18px}
     }
   </style>
 </head>
@@ -44,7 +86,7 @@
 <div class="app">
   <aside>
     <h1>3D řezy těles</h1>
-    <div class="sub">Verze 1: vyber těleso, zadej 3 body v souřadnicích a aplikace zobrazí rovinu řezu i výsledný mnohoúhelník.</div>
+    <div class="sub">Verze 1.3: body můžeš táhnout přímo v prostoru. Rovina řezu se při pohybu automaticky přepočítává.</div>
 
     <label for="solid">Těleso</label>
     <select id="solid">
@@ -55,49 +97,103 @@
       <option value="tetra">Čtyřstěn</option>
     </select>
 
+    <label>Promítání</label>
+    <div class="seg" id="projectionSwitch">
+      <button data-proj="perspective" class="active">Perspektivní</button>
+      <button data-proj="oblique">Volné rovnoběžné</button>
+      <button data-proj="orthographic">Ortografické</button>
+    </div>
+
     <div class="pts">
       <label>Bod P₁</label>
-      <div class="pt"><div class="badge">1</div><input id="p1" value="0, 0.2, 1" /></div>
+      <div class="pt">
+        <div class="badge">1</div>
+        <div class="coordGrid">
+          <label class="coordBox"><span>x</span><input id="p1x" type="text" inputmode="decimal" value="0" /></label>
+          <label class="coordBox"><span>y</span><input id="p1y" type="text" inputmode="decimal" value="0.2" /></label>
+          <label class="coordBox"><span>z</span><input id="p1z" type="text" inputmode="decimal" value="1" /></label>
+        </div>
+      </div>
       <label>Bod P₂</label>
-      <div class="pt"><div class="badge">2</div><input id="p2" value="1, 0.85, 0.3" /></div>
+      <div class="pt">
+        <div class="badge">2</div>
+        <div class="coordGrid">
+          <label class="coordBox"><span>x</span><input id="p2x" type="text" inputmode="decimal" value="1" /></label>
+          <label class="coordBox"><span>y</span><input id="p2y" type="text" inputmode="decimal" value="0.85" /></label>
+          <label class="coordBox"><span>z</span><input id="p2z" type="text" inputmode="decimal" value="0.3" /></label>
+        </div>
+      </div>
       <label>Bod P₃</label>
-      <div class="pt"><div class="badge">3</div><input id="p3" value="0.25, 1, 0.65" /></div>
+      <div class="pt">
+        <div class="badge">3</div>
+        <div class="coordGrid">
+          <label class="coordBox"><span>x</span><input id="p3x" type="text" inputmode="decimal" value="0.25" /></label>
+          <label class="coordBox"><span>y</span><input id="p3y" type="text" inputmode="decimal" value="1" /></label>
+          <label class="coordBox"><span>z</span><input id="p3z" type="text" inputmode="decimal" value="0.65" /></label>
+        </div>
+      </div>
     </div>
 
     <button class="primary" id="compute">Zobrazit řez</button>
     <button class="ghost" id="preset">Dát ukázkové body</button>
     <button class="danger" id="resetCam">Reset kamery</button>
 
+    <div class="drawPanel">
+      <div class="stepTitle">Ruční pomocné přímky</div>
+      <button class="ghost" id="drawLineMode" type="button">Kreslit přímky</button>
+      <button class="ghost" id="drawParallelMode" type="button">Kreslit rovnoběžku</button>
+      <button class="ghost" id="clearLines" type="button">Smazat přímky</button>
+      <div class="drawStatus" id="drawStatus">Režim kreslení je vypnutý.</div>
+    </div>
+
     <div class="help">
-      Souřadnice piš jako <code>x, y, z</code>. Pro jednoduchost jsou tělesa umístěna přibližně do krychle od 0 do 1.
-      Body zatím zadáváš ručně. Klikání na hrany přidáme v další verzi.
+      Oranžové body P₁, P₂, P₃ můžeš chytit myší. Pohybují se vždy pouze po hraně nebo po přímce procházející danou hranou.
       <br><br>
-      Ovládání: levé tlačítko myši = otáčení, kolečko = přiblížení, pravé tlačítko = posun.
+      Když bod dotáhneš do vrcholu, můžeš z něj „odbočit“ na jinou hranu.
+      <br><br>
+      Přepínač „Promítání“ mění způsob zobrazení: perspektivní, volné rovnoběžné a ortografické.
+      <br><br>
+      Krychlička vpravo nahoře nastavuje pohled: shora, zepředu, zprava atd.
+      <br><br>
+      Souřadnice zapisuj do samostatných kolonek <code>x</code>, <code>y</code>, <code>z</code>. Po změně se bod přesune a řez přepočítá.<br><br>V režimu „Kreslit přímky“ klikni na jeden bod a potom na druhý. Oranžové body P₁–P₃ se v tomto režimu neposouvají, ale slouží jako obyčejné klikací body. Přichytává se také k vrcholům a k pravoúhlým průmětům bodů do rovin stěn.<br><br>V režimu „Kreslit rovnoběžku“ nejdřív klikni na už nakreslenou přímku a potom na bod, kterým má nová rovnoběžka procházet. Když nakreslená přímka nebo rovnoběžka protne jinou přímku nebo hranu tělesa, vznikne v průsečíku nový klikací bod X.
     </div>
   </aside>
 
   <main>
     <div id="view"></div>
+
     <div class="topbar">
-      <div class="pill status" id="status">Připraveno</div>
+      <div class="pill status" id="status">Načítám 3D knihovnu…</div>
       <div class="pill">Řez je zvýrazněn zeleně</div>
     </div>
+
+    <div class="viewCube" title="Rychlé nastavení pohledu">
+      <div class="cubeGrid">
+        <div class="empty"></div><div class="cubeBtn" data-view="top">H</div><div class="empty"></div>
+        <div class="cubeBtn" data-view="left">L</div><div class="cubeBtn iso" data-view="iso">3D</div><div class="cubeBtn" data-view="right">P</div>
+        <div class="empty"></div><div class="cubeBtn" data-view="front">Č</div><div class="cubeBtn" data-view="back">Z</div>
+      </div>
+    </div>
+
     <div class="note" id="explain">
       Zadej tři body. Program jimi určí rovinu a najde její průsečíky se všemi hranami tělesa.
     </div>
   </main>
 </div>
 
-<script src="https://cdn.jsdelivr.net/npm/three@0.164.1/build/three.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/three@0.164.1/examples/js/controls/OrbitControls.js"></script>
-
-<script>
+<script type="module">
+import * as THREE from "three";
+import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+import { DragControls } from "three/addons/controls/DragControls.js";
 
 const view = document.getElementById("view");
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0xf3f6f8);
 
-const camera = new THREE.PerspectiveCamera(45, 1, 0.01, 100);
+let activeProjection = "perspective";
+const perspCamera = new THREE.PerspectiveCamera(45, 1, 0.01, 100);
+const orthoCamera = new THREE.OrthographicCamera(-1.8, 1.8, 1.8, -1.8, 0.01, 100);
+let camera = perspCamera;
 camera.position.set(2.4, 2.1, 2.5);
 
 const renderer = new THREE.WebGLRenderer({antialias:true});
@@ -114,20 +210,53 @@ dir.position.set(3,4,5);
 scene.add(dir);
 
 const root = new THREE.Group();
-scene.add(root);
+const cutRoot = new THREE.Group();
+const pointRoot = new THREE.Group();
+const axesRoot = new THREE.Group();
+const manualLineRoot = new THREE.Group();
+const snapRoot = new THREE.Group();
+scene.add(axesRoot, root, cutRoot, pointRoot, manualLineRoot, snapRoot);
 
-const blue = 0x2b83c6;
 const faceMat = new THREE.MeshStandardMaterial({color:0xdbeaf3, transparent:true, opacity:0.48, roughness:0.75, side:THREE.DoubleSide});
 const cutMat = new THREE.MeshStandardMaterial({color:0x22c55e, transparent:true, opacity:0.58, roughness:0.65, side:THREE.DoubleSide});
-const edgeMat = new THREE.LineBasicMaterial({color:blue});
-const pointMat = new THREE.MeshStandardMaterial({color:0xc85b05, roughness:0.4});
+const edgeMat = new THREE.LineBasicMaterial({color:0x2b83c6});
 const helperMat = new THREE.LineDashedMaterial({color:0x0f6ea8, dashSize:0.035, gapSize:0.025});
+const axisXMat = new THREE.LineBasicMaterial({color:0xdc2626});
+const axisYMat = new THREE.LineBasicMaterial({color:0x16a34a});
+const axisZMat = new THREE.LineBasicMaterial({color:0x2563eb});
+const gridMat = new THREE.LineBasicMaterial({color:0xd1d5db, transparent:true, opacity:0.55});
+const manualLineMat = new THREE.LineDashedMaterial({color:0xf59e0b, dashSize:0.045, gapSize:0.025});
+const manualLineSelectedMat = new THREE.LineDashedMaterial({color:0xdc2626, dashSize:0.045, gapSize:0.025});
+const snapMat = new THREE.MeshStandardMaterial({color:0x7c3aed, transparent:true, opacity:0.72});
+const snapSelectedMat = new THREE.MeshStandardMaterial({color:0xf59e0b});
 
 let vertices=[], edges=[], faces=[];
+let pointMeshes = [];
+let dragControls = null;
+const VERTEX_SWITCH_EPS = 0.09;
+let currentStep = 0;
+let cutVisible = false;
+let constructionSteps = [
+  {title:"Krok 1: Zadané body P₁, P₂, P₃", message:"Zadané body určují rovinu řezu."}
+];
+let vertexNames = [];
+let drawMode = false;
+let drawTool = "line";
+let firstSnap = null;
+let firstLine = null;
+let manualLines = [];
+let intersectionSnapItems = [];
+let snapMeshes = [];
+const raycaster = new THREE.Raycaster();
+raycaster.params.Line.threshold = 0.06;
+const pointer = new THREE.Vector2();
 
 const solids = {
   cube(){
-    const v = [[0,0,0],[1,0,0],[1,1,0],[0,1,0],[0,0,1],[1,0,1],[1,1,1],[0,1,1]];
+    // Souřadnice krychle jsou zvolené školně:
+    // D = (0,0,0), C = (1,0,0), A = (0,0,1), H = (0,1,0).
+    // Osy tedy vedou: x po DC, y po DH, z po DA.
+    const v = [[0,0,1],[1,0,1],[1,0,0],[0,0,0],[0,1,1],[1,1,1],[1,1,0],[0,1,0]];
     const e = [[0,1],[1,2],[2,3],[3,0],[4,5],[5,6],[6,7],[7,4],[0,4],[1,5],[2,6],[3,7]];
     const f = [[0,1,2,3],[4,7,6,5],[0,4,5,1],[1,5,6,2],[2,6,7,3],[3,7,4,0]];
     return [v,e,f];
@@ -159,66 +288,500 @@ const solids = {
 };
 
 function vec(a){ return new THREE.Vector3(a[0],a[1],a[2]); }
-function parsePoint(s){
-  const nums = s.replace(/;/g,",").split(",").map(x=>Number(x.trim().replace(",", ".")));
-  if(nums.length !== 3 || nums.some(n=>!Number.isFinite(n))) throw new Error("Bod musí mít tvar x, y, z");
-  return new THREE.Vector3(nums[0],nums[1],nums[2]);
+
+function parseCoord(id){
+  const el = document.getElementById(id);
+  const n = Number(String(el.value).trim().replace(",", "."));
+  if(!Number.isFinite(n)) throw new Error("Souřadnice musí být číslo.");
+  return n;
 }
-function clear(){
-  while(root.children.length) root.remove(root.children[0]);
+
+function fmt(n){
+  const rounded = Math.round(n*1000)/1000;
+  return String(rounded).replace(".", ",");
 }
+function pointToInputs(i, p){
+  document.getElementById(`p${i}x`).value = fmt(p.x);
+  document.getElementById(`p${i}y`).value = fmt(p.y);
+  document.getElementById(`p${i}z`).value = fmt(p.z);
+}
+function setPointInputs(i, value){
+  const parts = value.replace(/;/g,",").split(",").map(x=>Number(x.trim().replace(",", ".")));
+  if(parts.length !== 3 || parts.some(n=>!Number.isFinite(n))) throw new Error("Bod musí mít tvar x, y, z");
+  document.getElementById(`p${i}x`).value = parts[0];
+  document.getElementById(`p${i}y`).value = parts[1];
+  document.getElementById(`p${i}z`).value = parts[2];
+}
+
+function clearGroup(g){
+  while(g.children.length) g.remove(g.children[0]);
+}
+
 function makeFace(indices){
   const pts = indices.map(i=>vertices[i]);
   const geom = new THREE.BufferGeometry();
-  const tris = [];
-  for(let i=1;i<pts.length-1;i++) tris.push(pts[0],pts[i],pts[i+1]);
-  geom.setFromPoints(tris);
+  const arr = [];
+  for(let i=1;i<pts.length-1;i++){
+    arr.push(...pts[0].toArray(), ...pts[i].toArray(), ...pts[i+1].toArray());
+  }
+  geom.setAttribute("position", new THREE.Float32BufferAttribute(arr, 3));
   geom.computeVertexNormals();
-  const mesh = new THREE.Mesh(geom, faceMat);
-  root.add(mesh);
+  root.add(new THREE.Mesh(geom, faceMat));
 }
-function line(a,b,mat=edgeMat){
+
+function line(a,b,mat=edgeMat,parent=root){
   const g = new THREE.BufferGeometry().setFromPoints([a,b]);
   const l = new THREE.Line(g, mat);
   if(mat.isLineDashedMaterial) l.computeLineDistances();
-  root.add(l);
+  parent.add(l);
   return l;
 }
-function sphere(p, color=0xc85b05, r=0.035){
-  const m = new THREE.Mesh(new THREE.SphereGeometry(r, 24, 16), new THREE.MeshStandardMaterial({color}));
+
+function sphere(p, color=0xc85b05, r=0.035, parent=root){
+  const canvas = document.createElement("canvas");
+  canvas.width = 128; canvas.height = 128;
+  const c = canvas.getContext("2d");
+  c.clearRect(0,0,128,128);
+  c.font = "bold 92px system-ui, sans-serif";
+  c.fillStyle = "#" + color.toString(16).padStart(6,"0");
+  c.textAlign = "center";
+  c.textBaseline = "middle";
+  c.fillText("×",64,60);
+  const tex = new THREE.CanvasTexture(canvas);
+  const material = new THREE.SpriteMaterial({map:tex, transparent:true, color:0xffffff});
+  const m = new THREE.Sprite(material);
+  const size = Math.max(0.055, r * 2.2);
+  m.scale.set(size, size, 1);
   m.position.copy(p);
-  root.add(m);
+
+  // Sprite se při velmi malém pohybu kamery nebo při dragování někdy
+  // ořízl kvůli depth testu a značka X zmizela.
+  // Tímto zajistíme, že zůstane stále viditelná v místě tažení.
+  material.depthTest = false;
+  material.depthWrite = false;
+  m.renderOrder = 999;
+
+  parent.add(m);
+  return m;
 }
-function textSprite(txt, pos){
+
+function textSprite(txt, pos, parent=root){
   const canvas = document.createElement("canvas");
   canvas.width=256; canvas.height=128;
   const c = canvas.getContext("2d");
+  c.clearRect(0,0,256,128);
   c.font="bold 54px Georgia";
   c.fillStyle="#1f2937";
-  c.textAlign="center"; c.textBaseline="middle";
+  c.textAlign="center";
+  c.textBaseline="middle";
   c.fillText(txt,128,64);
   const tex = new THREE.CanvasTexture(canvas);
   const sp = new THREE.Sprite(new THREE.SpriteMaterial({map:tex, transparent:true}));
   sp.position.copy(pos);
   sp.scale.set(0.22,0.11,1);
-  root.add(sp);
+  sp.userData.isTextLabel = true;
+  parent.add(sp);
+  return sp;
 }
+
+
+function makeCanvasSprite(txt, opts={}){
+  const canvas = document.createElement("canvas");
+  canvas.width=256; canvas.height=128;
+  const c = canvas.getContext("2d");
+  c.clearRect(0,0,256,128);
+  c.font = opts.font || "bold 44px system-ui, sans-serif";
+  c.fillStyle = opts.color || "#374151";
+  c.textAlign="center";
+  c.textBaseline="middle";
+  c.fillText(txt,128,64);
+  const tex = new THREE.CanvasTexture(canvas);
+  const sp = new THREE.Sprite(new THREE.SpriteMaterial({map:tex, transparent:true}));
+  sp.scale.set(opts.w || 0.16, opts.h || 0.08, 1);
+  return sp;
+}
+
+function addAxisLabel(txt, pos, color="#374151", scale=1){
+  const sp = makeCanvasSprite(txt, {color, w:0.16*scale, h:0.08*scale});
+  sp.position.copy(pos);
+  axesRoot.add(sp);
+}
+
+function drawCoordinateAxes(){
+  clearGroup(axesRoot);
+  const L = 1.18;
+  const o = new THREE.Vector3(0,0,0);
+  line(o, new THREE.Vector3(L,0,0), axisXMat, axesRoot);
+  line(o, new THREE.Vector3(0,L,0), axisYMat, axesRoot);
+  line(o, new THREE.Vector3(0,0,L), axisZMat, axesRoot);
+
+  // jemná pomocná mřížka po desetinách na třech souřadnicových rovinách
+  for(let k=0;k<=10;k++){
+    const t = k/10;
+    line(new THREE.Vector3(t,0,0), new THREE.Vector3(t,1,0), gridMat, axesRoot);
+    line(new THREE.Vector3(0,t,0), new THREE.Vector3(1,t,0), gridMat, axesRoot);
+    line(new THREE.Vector3(t,0,0), new THREE.Vector3(t,0,1), gridMat, axesRoot);
+    line(new THREE.Vector3(0,0,t), new THREE.Vector3(1,0,t), gridMat, axesRoot);
+    line(new THREE.Vector3(0,t,0), new THREE.Vector3(0,t,1), gridMat, axesRoot);
+    line(new THREE.Vector3(0,0,t), new THREE.Vector3(0,1,t), gridMat, axesRoot);
+
+    const label = t.toFixed(1).replace('.', ',');
+    addAxisLabel(label, new THREE.Vector3(t,-0.055,0), "#991b1b", 0.72);
+    addAxisLabel(label, new THREE.Vector3(-0.06,t,0), "#166534", 0.72);
+    addAxisLabel(label, new THREE.Vector3(-0.055,0,t), "#1d4ed8", 0.72);
+  }
+  addAxisLabel("x", new THREE.Vector3(1.28,0,0), "#dc2626", 1.15);
+  addAxisLabel("y", new THREE.Vector3(0,1.28,0), "#16a34a", 1.15);
+  addAxisLabel("z", new THREE.Vector3(0,0,1.28), "#2563eb", 1.15);
+}
+
 function drawSolid(kind){
-  clear();
+  clearGroup(root);
   [vertices,edges,faces] = solids[kind]();
   vertices = vertices.map(vec);
   faces.forEach(makeFace);
-  edges.forEach(([a,b])=>line(vertices[a], vertices[b]));
-  const names = ["A","B","C","D","E","F","G","H","V"];
-  vertices.forEach((p,i)=>textSprite(names[i] || String(i), p.clone().add(new THREE.Vector3(0.03,0.03,0.06))));
+  edges.forEach(([a,b])=>line(vertices[a], vertices[b], edgeMat, root));
+  const names = kind === "pyramid" ? ["A","B","C","D","V"] : ["A","B","C","D","E","F","G","H"];
+  vertexNames = names;
+  vertices.forEach((p,i)=>textSprite(names[i] || String(i), p.clone().add(new THREE.Vector3(0.04,0.04,0.07)), root));
 }
+
+
+function getBounds(){
+  const box = new THREE.Box3().setFromPoints(vertices);
+  return {min:box.min, max:box.max};
+}
+
+function addSnapPoint(pos, label, color=0x7c3aed){
+  const m = sphere(pos, color, 0.032, snapRoot);
+  m.userData.snapPoint = pos.clone();
+  m.userData.snapLabel = label;
+  snapMeshes.push(m);
+  textSprite(label, pos.clone().add(new THREE.Vector3(0.035,0.035,0.045)), snapRoot);
+  return m;
+}
+
+function samePoint(a,b){
+  return a.distanceTo(b) < 1e-5;
+}
+
+function addUniqueSnap(list, pos, label, color){
+  if(list.some(item=>samePoint(item.pos,pos))) return;
+  list.push({pos:pos.clone(), label, color});
+}
+
+function closestPointsOnTwoLines(p1, d1, p2, d2){
+  const r = p1.clone().sub(p2);
+  const a = d1.dot(d1);
+  const e = d2.dot(d2);
+  const b = d1.dot(d2);
+  const c = d1.dot(r);
+  const f = d2.dot(r);
+  const denom = a * e - b * b;
+  if(Math.abs(denom) < 1e-9) return null;
+  const t1 = (b * f - c * e) / denom;
+  const t2 = (a * f - b * c) / denom;
+  return {
+    pOnFirst: p1.clone().addScaledVector(d1, t1),
+    pOnSecond: p2.clone().addScaledVector(d2, t2),
+    t1,
+    t2
+  };
+}
+
+function addIntersectionCandidate(list, pos){
+  if(!Number.isFinite(pos.x) || !Number.isFinite(pos.y) || !Number.isFinite(pos.z)) return;
+  if(list.some(p=>p.distanceTo(pos) < 1e-4)) return;
+  if(vertices.some(v=>v.distanceTo(pos) < 1e-4)) return;
+  if(pointMeshes.some(m=>m.position.distanceTo(pos) < 1e-4)) return;
+  list.push(pos.clone());
+}
+
+function rebuildIntersectionSnapItems(){
+  const found = [];
+  const hitEps = 0.025;
+  const segmentEps = 1e-5;
+
+  manualLines.forEach((manual)=>{
+    const lp = manual.userData.point;
+    const ld = manual.userData.direction;
+    if(!lp || !ld) return;
+
+    edges.forEach(([ia, ib])=>{
+      const a = vertices[ia];
+      const b = vertices[ib];
+      const edgeDir = b.clone().sub(a);
+      const edgeLenSq = edgeDir.lengthSq();
+      if(edgeLenSq < 1e-12) return;
+      const cp = closestPointsOnTwoLines(lp, ld, a, edgeDir);
+      if(!cp) return;
+      const onSegment = cp.t2 >= -segmentEps && cp.t2 <= 1 + segmentEps;
+      const closeEnough = cp.pOnFirst.distanceTo(cp.pOnSecond) < hitEps;
+      if(onSegment && closeEnough) addIntersectionCandidate(found, cp.pOnSecond);
+    });
+  });
+
+  for(let i=0;i<manualLines.length;i++){
+    for(let j=i+1;j<manualLines.length;j++){
+      const l1 = manualLines[i];
+      const l2 = manualLines[j];
+      const p1 = l1.userData.point;
+      const d1 = l1.userData.direction;
+      const p2 = l2.userData.point;
+      const d2 = l2.userData.direction;
+      if(!p1 || !d1 || !p2 || !d2) continue;
+      const cp = closestPointsOnTwoLines(p1, d1, p2, d2);
+      if(!cp) continue;
+      if(cp.pOnFirst.distanceTo(cp.pOnSecond) < hitEps){
+        const mid = cp.pOnFirst.clone().add(cp.pOnSecond).multiplyScalar(0.5);
+        addIntersectionCandidate(found, mid);
+      }
+    }
+  }
+
+  intersectionSnapItems = found.map((pos, i)=>({
+    pos,
+    label: `X${i+1}`,
+    color: 0x0ea5e9
+  }));
+}
+
+function rebuildSnapPoints(){
+  clearGroup(snapRoot);
+  snapMeshes = [];
+  firstSnap = null;
+  if(!drawMode) return;
+
+  rebuildIntersectionSnapItems();
+
+  const items = [];
+  vertices.forEach((p,i)=>addUniqueSnap(items, p, vertexNames[i] || String(i), 0x2563eb));
+  // Oranžové body P₁–P₃ se v režimu kreslení používají přímo jako klikací body,
+  // proto pro ně nevytváříme duplicitní pomocné snap body.
+
+  if(vertices.length){
+    const {min,max} = getBounds();
+    pointMeshes.forEach((m,i)=>{
+      const p = m.position;
+      const planes = [
+        ['x', min.x], ['x', max.x],
+        ['y', min.y], ['y', max.y],
+        ['z', min.z], ['z', max.z]
+      ];
+      planes.forEach(([axis,value])=>{
+        const q = p.clone();
+        q[axis] = value;
+        if(!samePoint(q,p)) addUniqueSnap(items, q, `P${i+1}′`, 0x7c3aed);
+      });
+    });
+  }
+
+  intersectionSnapItems.forEach(item=>addUniqueSnap(items, item.pos, item.label, item.color));
+
+  items.forEach(item=>addSnapPoint(item.pos, item.label, item.color));
+}
+
+function updateDrawStatus(text){
+  const el = document.getElementById('drawStatus');
+  if(el) el.textContent = text;
+}
+
+function createPointDragControls(){
+  if(dragControls) dragControls.dispose();
+  dragControls = null;
+  if(drawMode || !pointMeshes.length) return;
+
+  dragControls = new DragControls(pointMeshes, camera, renderer.domElement);
+  dragControls.addEventListener("dragstart", () => controls.enabled = false);
+  dragControls.addEventListener("drag", (event) => {
+    const rawPoint = event.object.position.clone();
+    constrainPointToItsLine(event.object, rawPoint);
+    event.object.userData.snapPoint = event.object.position.clone();
+    updateInputsFromPointMeshes();
+    recomputeOnlyCut();
+    refreshPointLabels();
+    rebuildSnapPoints();
+  });
+  dragControls.addEventListener("dragend", (event) => {
+    controls.enabled = true;
+    event.object.userData.snapPoint = event.object.position.clone();
+    updateInputsFromPointMeshes();
+    recomputeOnlyCut();
+    refreshPointLabels();
+    rebuildSnapPoints();
+  });
+}
+
+function resetManualSelection(){
+  if(firstSnap && firstSnap.userData && firstSnap.userData.originalColor !== undefined && firstSnap.material && firstSnap.material.color){
+    firstSnap.material.color.setHex(firstSnap.userData.originalColor);
+    delete firstSnap.userData.originalColor;
+  }
+  firstSnap = null;
+  if(firstLine){
+    firstLine.material = manualLineMat;
+    firstLine = null;
+  }
+}
+
+function markFirstSnap(snap){
+  if(!snap || !snap.material || !snap.material.color) return;
+  if(snap.userData.originalColor === undefined) snap.userData.originalColor = snap.material.color.getHex();
+  snap.material.color.setHex(0xf59e0b);
+}
+
+function updateDrawButtons(){
+  const lineBtn = document.getElementById('drawLineMode');
+  const parallelBtn = document.getElementById('drawParallelMode');
+  if(lineBtn){
+    lineBtn.classList.toggle('drawOn', drawMode && drawTool === 'line');
+    lineBtn.textContent = (drawMode && drawTool === 'line') ? 'Ukončit kreslení přímek' : 'Kreslit přímky';
+  }
+  if(parallelBtn){
+    parallelBtn.classList.toggle('drawOn', drawMode && drawTool === 'parallel');
+    parallelBtn.textContent = (drawMode && drawTool === 'parallel') ? 'Ukončit rovnoběžky' : 'Kreslit rovnoběžku';
+  }
+}
+
+function setDrawTool(tool, on){
+  drawTool = tool;
+  drawMode = on;
+  resetManualSelection();
+  controls.enabled = !drawMode;
+  createPointDragControls();
+  updateDrawButtons();
+  if(!drawMode){
+    updateDrawStatus('Režim kreslení je vypnutý. Oranžové body lze zase posouvat.');
+  }else if(drawTool === 'line'){
+    updateDrawStatus('Klikni na první bod přímky. Oranžové body jsou teď jen klikací, nejdou posouvat.');
+  }else{
+    updateDrawStatus('Klikni na už nakreslenou přímku, podle které chceš vést rovnoběžku.');
+  }
+  rebuildSnapPoints();
+}
+
+function setDrawMode(on){
+  setDrawTool('line', on);
+}
+
+function setParallelMode(on){
+  setDrawTool('parallel', on);
+}
+
+function drawInfiniteManualLineFromDirection(point, dir, label=''){
+  if(dir.length() < 1e-8) return null;
+  const unit = dir.clone().normalize();
+  const length = 3.0;
+  const start = point.clone().addScaledVector(unit, -length);
+  const end = point.clone().addScaledVector(unit, length);
+  const l = line(start, end, manualLineMat, manualLineRoot);
+  l.userData.manualLine = true;
+  l.userData.point = point.clone();
+  l.userData.direction = unit.clone();
+  l.userData.label = label || `p${manualLines.length + 1}`;
+  manualLines.push(l);
+  return l;
+}
+
+function drawInfiniteManualLine(a,b){
+  const dir = b.clone().sub(a);
+  return drawInfiniteManualLineFromDirection(a, dir);
+}
+
+function getScreenDistanceToObject(obj, clientX, clientY){
+  const rect = renderer.domElement.getBoundingClientRect();
+  const worldPos = new THREE.Vector3();
+  obj.getWorldPosition(worldPos);
+  worldPos.project(camera);
+  const sx = (worldPos.x + 1) * 0.5 * rect.width + rect.left;
+  const sy = (-worldPos.y + 1) * 0.5 * rect.height + rect.top;
+  return Math.hypot(clientX - sx, clientY - sy);
+}
+
+function getClickedSnap(event){
+  const clickableSnaps = [...snapMeshes, ...pointMeshes];
+
+  // Nejdřív zkusíme přesný 3D zásah.
+  const hits = raycaster.intersectObjects(clickableSnaps, false);
+  if(hits.length) return hits[0].object;
+
+  // Pomocné body jsou záměrně malé, aby nerušily obrázek.
+  // Pro klikání ale potřebujeme větší toleranci v pixelech, jinak se rovnoběžka
+  // snadno chytá jen na velké oranžové body P₁–P₃.
+  const maxPx = 18;
+  let best = null;
+  let bestDist = Infinity;
+  clickableSnaps.forEach(obj=>{
+    const d = getScreenDistanceToObject(obj, event.clientX, event.clientY);
+    if(d < bestDist){
+      bestDist = d;
+      best = obj;
+    }
+  });
+  return bestDist <= maxPx ? best : null;
+}
+
+function getClickedManualLine(){
+  const hits = raycaster.intersectObjects(manualLines, false);
+  return hits.length ? hits[0].object : null;
+}
+
+function handleLineDrawClick(event){
+  const snap = getClickedSnap(event);
+  if(!snap) return;
+  if(!firstSnap){
+    firstSnap = snap;
+    markFirstSnap(snap);
+    updateDrawStatus(`Vybrán bod ${snap.userData.snapLabel}. Teď klikni na druhý bod.`);
+    return;
+  }
+  if(snap === firstSnap) return;
+  drawInfiniteManualLine(firstSnap.userData.snapPoint, snap.userData.snapPoint);
+  updateDrawStatus(`Přímka ${firstSnap.userData.snapLabel}${snap.userData.snapLabel} nakreslena. Klikni na další první bod.`);
+  resetManualSelection();
+  rebuildSnapPoints();
+}
+
+function handleParallelDrawClick(event){
+  if(!firstLine){
+    const chosenLine = getClickedManualLine();
+    if(!chosenLine){
+      updateDrawStatus('Nejdřív klikni na už nakreslenou přímku. Pokud žádná není, nejdřív ji vytvoř režimem „Kreslit přímky“.');
+      return;
+    }
+    firstLine = chosenLine;
+    firstLine.material = manualLineSelectedMat;
+    firstLine.computeLineDistances();
+    updateDrawStatus('Přímka vybrána. Teď klikni na bod, kterým má vést rovnoběžka.');
+    return;
+  }
+
+  const snap = getClickedSnap(event);
+  if(!snap) return;
+  drawInfiniteManualLineFromDirection(snap.userData.snapPoint, firstLine.userData.direction, `rovnoběžka`);
+  updateDrawStatus(`Rovnoběžka bodem ${snap.userData.snapLabel} nakreslena. Klikni na další přímku.`);
+  resetManualSelection();
+  rebuildSnapPoints();
+}
+
+function handleDrawPointer(event){
+  if(!drawMode) return;
+  const rect = renderer.domElement.getBoundingClientRect();
+  pointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+  pointer.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+  raycaster.setFromCamera(pointer, camera);
+
+  if(drawTool === 'parallel') handleParallelDrawClick(event);
+  else handleLineDrawClick(event);
+}
+
 function planeFrom3(p1,p2,p3){
   const n = p2.clone().sub(p1).cross(p3.clone().sub(p1));
   if(n.length()<1e-8) throw new Error("Zadané body leží v jedné přímce, rovinu neurčí.");
   n.normalize();
-  const d = -n.dot(p1);
-  return {n,d};
+  return {n, d:-n.dot(p1)};
 }
+
 function intersectSegmentPlane(a,b,plane){
   const da = plane.n.dot(a)+plane.d;
   const db = plane.n.dot(b)+plane.d;
@@ -229,6 +792,7 @@ function intersectSegmentPlane(a,b,plane){
   if(t<-eps || t>1+eps) return null;
   return a.clone().lerp(b, t);
 }
+
 function uniquePoints(ps){
   const out=[];
   for(const p of ps){
@@ -236,6 +800,7 @@ function uniquePoints(ps){
   }
   return out;
 }
+
 function orderPolygon(ps, normal){
   const center = ps.reduce((s,p)=>s.add(p), new THREE.Vector3()).multiplyScalar(1/ps.length);
   let u = ps[0].clone().sub(center).normalize();
@@ -246,44 +811,228 @@ function orderPolygon(ps, normal){
     return aa-bb;
   });
 }
+
 function drawCut(ps, normal){
   const ordered = orderPolygon(ps, normal);
+  const arr = [];
+  for(let i=1;i<ordered.length-1;i++){
+    arr.push(...ordered[0].toArray(), ...ordered[i].toArray(), ...ordered[i+1].toArray());
+  }
   const geom = new THREE.BufferGeometry();
-  const tris=[];
-  for(let i=1;i<ordered.length-1;i++) tris.push(ordered[0],ordered[i],ordered[i+1]);
-  geom.setFromPoints(tris);
+  geom.setAttribute("position", new THREE.Float32BufferAttribute(arr, 3));
   geom.computeVertexNormals();
-  const mesh = new THREE.Mesh(geom, cutMat);
-  root.add(mesh);
-  for(let i=0;i<ordered.length;i++) line(ordered[i], ordered[(i+1)%ordered.length], new THREE.LineBasicMaterial({color:0x16a34a}));
-  ordered.forEach(p=>sphere(p,0x16a34a,0.03));
+  cutRoot.add(new THREE.Mesh(geom, cutMat));
+  for(let i=0;i<ordered.length;i++) line(ordered[i], ordered[(i+1)%ordered.length], new THREE.LineBasicMaterial({color:0x16a34a}), cutRoot);
+  ordered.forEach(p=>sphere(p,0x16a34a,0.032,cutRoot));
 }
-function compute(){
-  drawSolid(document.getElementById("solid").value);
-  const p1=parsePoint(document.getElementById("p1").value);
-  const p2=parsePoint(document.getElementById("p2").value);
-  const p3=parsePoint(document.getElementById("p3").value);
-  [p1,p2,p3].forEach((p,i)=>{ sphere(p,0xc85b05,0.045); textSprite("P"+(i+1), p.clone().add(new THREE.Vector3(0.04,0.04,0.08))); });
-  line(p1,p2,helperMat); line(p2,p3,helperMat); line(p3,p1,helperMat);
-  const plane = planeFrom3(p1,p2,p3);
-  const cuts = [];
-  edges.forEach(([i,j])=>{
-    const p = intersectSegmentPlane(vertices[i], vertices[j], plane);
-    if(p) cuts.push(p);
+
+function readInputPoints(){
+  return [1,2,3].map(i=>new THREE.Vector3(
+    parseCoord(`p${i}x`),
+    parseCoord(`p${i}y`),
+    parseCoord(`p${i}z`)
+  ));
+}
+
+function closestPointOnLine(p, a, b){
+  const ab = b.clone().sub(a);
+  const t = p.clone().sub(a).dot(ab) / ab.lengthSq();
+  return {
+    point: a.clone().addScaledVector(ab, t),
+    t
+  };
+}
+
+function distanceToLine(p, a, b){
+  return closestPointOnLine(p, a, b).point.distanceTo(p);
+}
+
+function nearestEdgeForPoint(p){
+  let best = {edgeIndex:0, dist:Infinity, projected:null, t:0};
+  edges.forEach(([i,j], edgeIndex)=>{
+    const a = vertices[i];
+    const b = vertices[j];
+    const pr = closestPointOnLine(p,a,b);
+    const d = pr.point.distanceTo(p);
+    if(d < best.dist) best = {edgeIndex, dist:d, projected:pr.point, t:pr.t};
   });
-  const uniq = uniquePoints(cuts);
-  if(uniq.length < 3) throw new Error("Rovina těleso neprotíná v mnohoúhelníku. Zkus jiné body.");
-  drawCut(uniq, plane.n);
-  document.getElementById("status").textContent = "Řez nalezen: " + uniq.length + " vrcholů";
-  document.getElementById("explain").innerHTML =
-    "Program určil rovinu třemi zadanými body P₁, P₂, P₃. Potom prošel všechny hrany tělesa a našel místa, kde je rovina protíná. Z těchto průsečíků vznikl zelený mnohoúhelník řezu.";
+  return best;
 }
-function resize(){
-  const r = view.getBoundingClientRect();
-  renderer.setSize(r.width, r.height);
-  camera.aspect = r.width/r.height;
-  camera.updateProjectionMatrix();
+
+function edgeEndpointNear(projectedInfo, edgeIndex){
+  const [i,j] = edges[edgeIndex];
+  if(projectedInfo.t <= VERTEX_SWITCH_EPS) return i;
+  if(projectedInfo.t >= 1 - VERTEX_SWITCH_EPS) return j;
+  return null;
 }
+
+function chooseEdgeAtVertex(rawPoint, vertexIndex, currentEdgeIndex){
+  let best = {edgeIndex:currentEdgeIndex, dist:Infinity};
+  edges.forEach(([i,j], edgeIndex)=>{
+    if(i !== vertexIndex && j !== vertexIndex) return;
+    const d = distanceToLine(rawPoint, vertices[i], vertices[j]);
+    if(d < best.dist) best = {edgeIndex, dist:d};
+  });
+  return best.edgeIndex;
+}
+
+function constrainPointToItsLine(mesh, rawPoint){
+  let edgeIndex = mesh.userData.edgeIndex;
+  let [aIndex,bIndex] = edges[edgeIndex];
+  let info = closestPointOnLine(rawPoint, vertices[aIndex], vertices[bIndex]);
+
+  const vertexIndex = edgeEndpointNear(info, edgeIndex);
+  if(vertexIndex !== null){
+    const newEdgeIndex = chooseEdgeAtVertex(rawPoint, vertexIndex, edgeIndex);
+    edgeIndex = newEdgeIndex;
+    mesh.userData.edgeIndex = newEdgeIndex;
+    [aIndex,bIndex] = edges[edgeIndex];
+    info = closestPointOnLine(rawPoint, vertices[aIndex], vertices[bIndex]);
+  }
+
+  mesh.position.copy(info.point);
+}
+
+function updateInputsFromPointMeshes(){
+  pointMeshes.forEach((m,i)=>pointToInputs(i+1, m.position));
+}
+
+function createDraggablePoints(points){
+  clearGroup(pointRoot);
+  pointMeshes = points.map((p,i)=>{
+    const nearest = nearestEdgeForPoint(p);
+    const m = sphere(nearest.projected,0xc85b05,0.055,pointRoot);
+    m.userData.index = i;
+    m.userData.edgeIndex = nearest.edgeIndex;
+    m.userData.snapPoint = m.position.clone();
+    m.userData.snapLabel = 'P' + (i+1);
+    textSprite("P"+(i+1), m.position.clone().add(new THREE.Vector3(0.06,0.06,0.09)), pointRoot);
+    return m;
+  });
+
+  updateInputsFromPointMeshes();
+
+  createPointDragControls();
+}
+
+function refreshPointLabels(){
+  pointRoot.children
+    .filter(o=>o.userData && o.userData.isTextLabel)
+    .forEach(o=>pointRoot.remove(o));
+  pointMeshes.forEach((m,i)=>textSprite("P"+(i+1), m.position.clone().add(new THREE.Vector3(0.06,0.06,0.09)), pointRoot));
+}
+
+function faceName(faceIndex){
+  const names = vertexNames.length ? vertexNames : ["A","B","C","D","E","F","G","H","V"];
+  const face = faces[faceIndex] || [];
+  return "stěna " + face.map(i=>names[i] || String(i)).join("");
+}
+
+function pointOnFace(p, faceIndex){
+  const ids = faces[faceIndex];
+  if(!ids || ids.length < 3) return false;
+  const a = vertices[ids[0]], b = vertices[ids[1]], c = vertices[ids[2]];
+  const n = b.clone().sub(a).cross(c.clone().sub(a));
+  if(n.length() < 1e-9) return false;
+  n.normalize();
+  return Math.abs(n.dot(p.clone().sub(a))) < 1e-5;
+}
+
+function sideFaceName(a,b){
+  for(let i=0;i<faces.length;i++){
+    if(pointOnFace(a,i) && pointOnFace(b,i)) return faceName(i);
+  }
+  return "některá stěna tělesa";
+}
+
+function pointLabel(p, ordered, index){
+  for(let i=0;i<pointMeshes.length;i++){
+    if(p.distanceTo(pointMeshes[i].position) < 1e-5) return "P" + (i+1);
+  }
+  return "R" + (index + 1);
+}
+
+function buildConstructionSteps(ordered){
+  const totalSideSteps = ordered.length;
+  const steps = [
+    {title:"Krok 1: Zadané body", message:"Oranžové body P₁, P₂, P₃ určují rovinu řezu. Body můžeš táhnout nebo zadat souřadnicemi.", kind:"points"},
+    {title:"Krok 2: Pomocná rovina", message:"Pomocně spojíme body P₁, P₂, P₃. Trojúhelník neleží celý na povrchu tělesa, ale pomáhá určit rovinu řezu.", kind:"helper"},
+    {title:"Krok 3: Body řezu na hranách", message:"Najdeme průsečíky roviny řezu s hranami tělesa. Řez může končit jen na hranách tělesa, ne uprostřed stěny.", kind:"intersections"}
+  ];
+
+  for(let i=0;i<totalSideSteps;i++){
+    const a = ordered[i];
+    const b = ordered[(i+1)%ordered.length];
+    const la = pointLabel(a, ordered, i);
+    const lb = pointLabel(b, ordered, (i+1)%ordered.length);
+    steps.push({
+      title:`Krok ${steps.length + 1}: Spojení ${la}${lb}`,
+      message:`Body ${la} a ${lb} leží v jedné stěně (${sideFaceName(a,b)}) ⇒ spojíme je. Tato úsečka je jednou stranou řezu.`,
+      kind:"side",
+      sideIndex:i
+    });
+  }
+
+  steps.push({
+    title:`Krok ${steps.length + 1}: Výsledný řez`,
+    message:"Všechny nalezené strany řezu spojíme po obvodu. Zelený mnohoúhelník je výsledný řez tělesa rovinou.",
+    kind:"result"
+  });
+  return steps;
+}
+
+function updateStepControls(){
+  currentStep = Math.max(0, Math.min(currentStep, constructionSteps.length - 1));
+  const label = `${currentStep + 1}/${constructionSteps.length}: ${constructionSteps[currentStep].title.replace(/^Krok \d+: /, "")}`;
+  document.getElementById("stepText").textContent = label;
+  document.getElementById("stepPrev").disabled = currentStep === 0;
+  document.getElementById("stepNext").disabled = currentStep === constructionSteps.length - 1;
+}
+
+function updateCutButton(){
+  const btn = document.getElementById("compute");
+  if(btn) btn.textContent = cutVisible ? "Skrýt řez" : "Zobrazit řez";
+}
+
+function recomputeOnlyCut(){
+  clearGroup(cutRoot);
+  updateCutButton();
+  try{
+    const points = pointMeshes.length ? pointMeshes.map(m=>m.position.clone()) : readInputPoints();
+    const [p1,p2,p3] = points;
+
+    const plane = planeFrom3(p1,p2,p3);
+    const cuts = [];
+    edges.forEach(([i,j])=>{
+      const p = intersectSegmentPlane(vertices[i], vertices[j], plane);
+      if(p) cuts.push(p);
+    });
+    const uniq = uniquePoints(cuts);
+    if(uniq.length < 3) throw new Error("Rovina těleso neprotíná v mnohoúhelníku.");
+
+    if(cutVisible){
+      drawCut(uniq, plane.n);
+      document.getElementById("status").textContent = "Řez zobrazen: " + uniq.length + " vrcholů";
+      document.getElementById("explain").textContent = "Zelený mnohoúhelník zobrazuje řez tělesa rovinou určenou body P₁, P₂, P₃.";
+    }else{
+      document.getElementById("status").textContent = "Řez připraven: " + uniq.length + " vrcholů";
+      document.getElementById("explain").textContent = "Řez je zatím skrytý. Tlačítkem „Zobrazit řez“ ho zobrazíš, dalším kliknutím zase skryješ.";
+    }
+  }catch(e){
+    document.getElementById("status").textContent = "Nelze určit řez";
+    document.getElementById("explain").textContent = e.message;
+  }
+}
+
+function compute(){
+  drawCoordinateAxes();
+  drawSolid(document.getElementById("solid").value);
+  const points = readInputPoints();
+  createDraggablePoints(points);
+  recomputeOnlyCut();
+  rebuildSnapPoints();
+}
+
 function preset(){
   const kind = document.getElementById("solid").value;
   const sets = {
@@ -293,21 +1042,139 @@ function preset(){
     pyramid:["0.1, 0, 0","1.15, 0.7, 0","0.58, 0.5, 0.72"],
     tetra:["0.15, 0, 0","0.85, 0.45, 0","0.55, 0.42, 0.75"]
   };
-  [p1.value,p2.value,p3.value] = sets[kind];
+  setPointInputs(1, sets[kind][0]);
+  setPointInputs(2, sets[kind][1]);
+  setPointInputs(3, sets[kind][2]);
   compute();
 }
-document.getElementById("solid").addEventListener("change", ()=>{ preset(); });
+
+function setView(name){
+  const target = controls.target.clone();
+  const dist = 3.0;
+  const pos = {
+    iso: new THREE.Vector3(2.4,2.1,2.5),
+    top: new THREE.Vector3(0.5,0.5,3.2),
+    front: new THREE.Vector3(0.5,-3.0,0.55),
+    back: new THREE.Vector3(0.5,3.0,0.55),
+    right: new THREE.Vector3(3.1,0.5,0.55),
+    left: new THREE.Vector3(-2.4,0.5,0.55)
+  }[name];
+  camera.position.copy(pos);
+  camera.lookAt(target);
+  controls.update();
+}
+
+function syncCameras(from, to){
+  to.position.copy(from.position);
+  to.rotation.copy(from.rotation);
+  to.quaternion.copy(from.quaternion);
+  to.up.copy(from.up);
+  to.zoom = from.zoom || 1;
+}
+
+function applyProjectionMode(mode){
+  const oldCamera = camera;
+  activeProjection = mode;
+
+  if(mode === "perspective"){
+    camera = perspCamera;
+    syncCameras(oldCamera, camera);
+  }else{
+    camera = orthoCamera;
+    syncCameras(oldCamera, camera);
+  }
+
+  root.scale.set(1,1,1);
+  cutRoot.scale.set(1,1,1);
+  pointRoot.scale.set(1,1,1);
+  axesRoot.scale.set(1,1,1);
+  manualLineRoot.scale.set(1,1,1);
+  snapRoot.scale.set(1,1,1);
+  root.rotation.set(0,0,0);
+  cutRoot.rotation.set(0,0,0);
+  pointRoot.rotation.set(0,0,0);
+  axesRoot.rotation.set(0,0,0);
+  manualLineRoot.rotation.set(0,0,0);
+  snapRoot.rotation.set(0,0,0);
+
+  if(mode === "oblique"){
+    // školní „volné rovnoběžné promítání“ – těleso lehce smykově natočíme,
+    // kamera zůstává ortografická, takže rovnoběžky zůstanou rovnoběžné.
+    root.rotation.x = -0.18;
+    root.rotation.y = 0.34;
+    cutRoot.rotation.copy(root.rotation);
+    pointRoot.rotation.copy(root.rotation);
+    axesRoot.rotation.copy(root.rotation);
+    manualLineRoot.rotation.copy(root.rotation);
+    snapRoot.rotation.copy(root.rotation);
+  }
+
+  controls.object = camera;
+  controls.update();
+
+  createPointDragControls();
+
+  document.querySelectorAll("#projectionSwitch button").forEach(btn=>{
+    btn.classList.toggle("active", btn.dataset.proj === mode);
+  });
+
+  resize();
+}
+
+function resize(){
+  const r = view.getBoundingClientRect();
+  renderer.setSize(r.width, r.height);
+  const aspect = r.width / r.height;
+
+  perspCamera.aspect = aspect;
+  perspCamera.updateProjectionMatrix();
+
+  const size = 1.9;
+  orthoCamera.left = -size * aspect;
+  orthoCamera.right = size * aspect;
+  orthoCamera.top = size;
+  orthoCamera.bottom = -size;
+  orthoCamera.updateProjectionMatrix();
+}
+
+document.getElementById("solid").addEventListener("change", preset);
 document.getElementById("compute").addEventListener("click", ()=>{
-  try{ compute(); }catch(e){
+  try{
+    cutVisible = !cutVisible;
+    recomputeOnlyCut();
+  }catch(e){
     document.getElementById("status").textContent = "Chyba";
     document.getElementById("explain").textContent = e.message;
   }
 });
 document.getElementById("preset").addEventListener("click", preset);
-document.getElementById("resetCam").addEventListener("click", ()=>{
-  camera.position.set(2.4,2.1,2.5);
-  controls.target.set(0.5,0.5,0.45);
+document.getElementById("resetCam").addEventListener("click", ()=>setView("iso"));
+
+[1,2,3].forEach(i=>{
+  ["x","y","z"].forEach(axis=>{
+    document.getElementById(`p${i}${axis}`).addEventListener("change", compute);
+  });
 });
+
+document.querySelectorAll(".cubeBtn").forEach(btn=>{
+  btn.addEventListener("click", ()=>setView(btn.dataset.view));
+});
+
+document.querySelectorAll("#projectionSwitch button").forEach(btn=>{
+  btn.addEventListener("click", ()=>applyProjectionMode(btn.dataset.proj));
+});
+
+document.getElementById("drawLineMode").addEventListener("click", ()=>setDrawMode(!(drawMode && drawTool === 'line')));
+document.getElementById("drawParallelMode").addEventListener("click", ()=>setParallelMode(!(drawMode && drawTool === 'parallel')));
+document.getElementById("clearLines").addEventListener("click", ()=>{
+  clearGroup(manualLineRoot);
+  manualLines = [];
+  intersectionSnapItems = [];
+  resetManualSelection();
+  rebuildSnapPoints();
+});
+renderer.domElement.addEventListener("pointerdown", handleDrawPointer);
+
 window.addEventListener("resize", resize);
 resize();
 preset();
