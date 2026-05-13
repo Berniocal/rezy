@@ -1,0 +1,323 @@
+<!doctype html>
+<html lang="cs">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>3D řezy těles – verze 1</title>
+  <style>
+    :root{
+      --bg:#f3f6f8; --panel:#ffffff; --text:#1f2937; --muted:#6b7280;
+      --blue:#2b83c6; --line:#d7dee7; --accent:#16a34a; --danger:#dc2626;
+    }
+    *{box-sizing:border-box}
+    body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;background:var(--bg);color:var(--text)}
+    .app{display:grid;grid-template-columns:340px 1fr;min-height:100vh}
+    aside{background:var(--panel);border-right:1px solid var(--line);padding:18px;overflow:auto}
+    main{position:relative;min-height:100vh}
+    h1{font-size:22px;margin:0 0 8px}
+    .sub{color:var(--muted);font-size:14px;margin-bottom:18px;line-height:1.35}
+    label{display:block;font-weight:650;font-size:14px;margin:14px 0 6px}
+    select,input{width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:12px;font-size:15px;background:#fff}
+    button{border:0;border-radius:14px;padding:11px 12px;font-weight:700;cursor:pointer}
+    .row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+    .primary{background:var(--blue);color:white;width:100%;margin-top:14px}
+    .ghost{background:#eef5fb;color:#15527f;width:100%;margin-top:10px}
+    .danger{background:#fee2e2;color:#991b1b;width:100%;margin-top:10px}
+    .help{font-size:13px;color:var(--muted);line-height:1.45;background:#f8fafc;border:1px solid var(--line);padding:12px;border-radius:14px;margin-top:14px}
+    .pts{display:grid;gap:8px;margin-top:8px}
+    .pt{display:grid;grid-template-columns:28px 1fr;align-items:center;gap:8px}
+    .badge{height:28px;width:28px;border-radius:999px;background:#e0f2fe;color:#075985;display:grid;place-items:center;font-weight:800}
+    #view{position:absolute;inset:0}
+    .topbar{position:absolute;left:18px;right:18px;top:18px;display:flex;gap:10px;align-items:center;pointer-events:none}
+    .pill{pointer-events:auto;background:rgba(255,255,255,.9);backdrop-filter:blur(8px);border:1px solid var(--line);border-radius:999px;padding:9px 13px;font-size:14px;box-shadow:0 8px 30px rgba(0,0,0,.06)}
+    .status{font-weight:700;color:#15527f}
+    .note{position:absolute;left:18px;bottom:18px;max-width:560px;background:rgba(255,255,255,.92);border:1px solid var(--line);border-radius:18px;padding:14px 16px;line-height:1.45;box-shadow:0 10px 35px rgba(0,0,0,.08)}
+    code{background:#eef2f7;padding:1px 5px;border-radius:7px}
+    @media(max-width:850px){
+      .app{grid-template-columns:1fr}
+      aside{border-right:0;border-bottom:1px solid var(--line)}
+      main{height:70vh;min-height:520px}
+    }
+  </style>
+</head>
+<body>
+<div class="app">
+  <aside>
+    <h1>3D řezy těles</h1>
+    <div class="sub">Verze 1: vyber těleso, zadej 3 body v souřadnicích a aplikace zobrazí rovinu řezu i výsledný mnohoúhelník.</div>
+
+    <label for="solid">Těleso</label>
+    <select id="solid">
+      <option value="cube">Krychle</option>
+      <option value="cuboid">Kvádr</option>
+      <option value="triPrism">Kolmý trojboký hranol</option>
+      <option value="pyramid">Čtyřboký jehlan</option>
+      <option value="tetra">Čtyřstěn</option>
+    </select>
+
+    <div class="pts">
+      <label>Bod P₁</label>
+      <div class="pt"><div class="badge">1</div><input id="p1" value="0, 0.2, 1" /></div>
+      <label>Bod P₂</label>
+      <div class="pt"><div class="badge">2</div><input id="p2" value="1, 0.85, 0.3" /></div>
+      <label>Bod P₃</label>
+      <div class="pt"><div class="badge">3</div><input id="p3" value="0.25, 1, 0.65" /></div>
+    </div>
+
+    <button class="primary" id="compute">Zobrazit řez</button>
+    <button class="ghost" id="preset">Dát ukázkové body</button>
+    <button class="danger" id="resetCam">Reset kamery</button>
+
+    <div class="help">
+      Souřadnice piš jako <code>x, y, z</code>. Pro jednoduchost jsou tělesa umístěna přibližně do krychle od 0 do 1.
+      Body zatím zadáváš ručně. Klikání na hrany přidáme v další verzi.
+      <br><br>
+      Ovládání: levé tlačítko myši = otáčení, kolečko = přiblížení, pravé tlačítko = posun.
+    </div>
+  </aside>
+
+  <main>
+    <div id="view"></div>
+    <div class="topbar">
+      <div class="pill status" id="status">Připraveno</div>
+      <div class="pill">Řez je zvýrazněn zeleně</div>
+    </div>
+    <div class="note" id="explain">
+      Zadej tři body. Program jimi určí rovinu a najde její průsečíky se všemi hranami tělesa.
+    </div>
+  </main>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/three@0.164.1/build/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.164.1/examples/js/controls/OrbitControls.js"></script>
+
+<script>
+
+const view = document.getElementById("view");
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0xf3f6f8);
+
+const camera = new THREE.PerspectiveCamera(45, 1, 0.01, 100);
+camera.position.set(2.4, 2.1, 2.5);
+
+const renderer = new THREE.WebGLRenderer({antialias:true});
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+view.appendChild(renderer.domElement);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.target.set(0.5,0.5,0.45);
+
+scene.add(new THREE.HemisphereLight(0xffffff, 0x9aa8b5, 2.2));
+const dir = new THREE.DirectionalLight(0xffffff, 1.4);
+dir.position.set(3,4,5);
+scene.add(dir);
+
+const root = new THREE.Group();
+scene.add(root);
+
+const blue = 0x2b83c6;
+const faceMat = new THREE.MeshStandardMaterial({color:0xdbeaf3, transparent:true, opacity:0.48, roughness:0.75, side:THREE.DoubleSide});
+const cutMat = new THREE.MeshStandardMaterial({color:0x22c55e, transparent:true, opacity:0.58, roughness:0.65, side:THREE.DoubleSide});
+const edgeMat = new THREE.LineBasicMaterial({color:blue});
+const pointMat = new THREE.MeshStandardMaterial({color:0xc85b05, roughness:0.4});
+const helperMat = new THREE.LineDashedMaterial({color:0x0f6ea8, dashSize:0.035, gapSize:0.025});
+
+let vertices=[], edges=[], faces=[];
+
+const solids = {
+  cube(){
+    const v = [[0,0,0],[1,0,0],[1,1,0],[0,1,0],[0,0,1],[1,0,1],[1,1,1],[0,1,1]];
+    const e = [[0,1],[1,2],[2,3],[3,0],[4,5],[5,6],[6,7],[7,4],[0,4],[1,5],[2,6],[3,7]];
+    const f = [[0,1,2,3],[4,7,6,5],[0,4,5,1],[1,5,6,2],[2,6,7,3],[3,7,4,0]];
+    return [v,e,f];
+  },
+  cuboid(){
+    const v = [[0,0,0],[1.35,0,0],[1.35,0.8,0],[0,0.8,0],[0,0,0.75],[1.35,0,0.75],[1.35,0.8,0.75],[0,0.8,0.75]];
+    const e = [[0,1],[1,2],[2,3],[3,0],[4,5],[5,6],[6,7],[7,4],[0,4],[1,5],[2,6],[3,7]];
+    const f = [[0,1,2,3],[4,7,6,5],[0,4,5,1],[1,5,6,2],[2,6,7,3],[3,7,4,0]];
+    return [v,e,f];
+  },
+  triPrism(){
+    const v = [[0,0,0],[1.15,0,0],[0.35,0.95,0],[0,0,0.85],[1.15,0,0.85],[0.35,0.95,0.85]];
+    const e = [[0,1],[1,2],[2,0],[3,4],[4,5],[5,3],[0,3],[1,4],[2,5]];
+    const f = [[0,1,2],[3,5,4],[0,3,4,1],[1,4,5,2],[2,5,3,0]];
+    return [v,e,f];
+  },
+  pyramid(){
+    const v = [[0,0,0],[1.15,0,0],[1.15,1.0,0],[0,1.0,0],[0.58,0.5,1.15]];
+    const e = [[0,1],[1,2],[2,3],[3,0],[0,4],[1,4],[2,4],[3,4]];
+    const f = [[0,1,2,3],[0,4,1],[1,4,2],[2,4,3],[3,4,0]];
+    return [v,e,f];
+  },
+  tetra(){
+    const v = [[0,0,0],[1.15,0,0],[0.48,0.95,0],[0.55,0.42,1.05]];
+    const e = [[0,1],[1,2],[2,0],[0,3],[1,3],[2,3]];
+    const f = [[0,1,2],[0,3,1],[1,3,2],[2,3,0]];
+    return [v,e,f];
+  }
+};
+
+function vec(a){ return new THREE.Vector3(a[0],a[1],a[2]); }
+function parsePoint(s){
+  const nums = s.replace(/;/g,",").split(",").map(x=>Number(x.trim().replace(",", ".")));
+  if(nums.length !== 3 || nums.some(n=>!Number.isFinite(n))) throw new Error("Bod musí mít tvar x, y, z");
+  return new THREE.Vector3(nums[0],nums[1],nums[2]);
+}
+function clear(){
+  while(root.children.length) root.remove(root.children[0]);
+}
+function makeFace(indices){
+  const pts = indices.map(i=>vertices[i]);
+  const geom = new THREE.BufferGeometry();
+  const tris = [];
+  for(let i=1;i<pts.length-1;i++) tris.push(pts[0],pts[i],pts[i+1]);
+  geom.setFromPoints(tris);
+  geom.computeVertexNormals();
+  const mesh = new THREE.Mesh(geom, faceMat);
+  root.add(mesh);
+}
+function line(a,b,mat=edgeMat){
+  const g = new THREE.BufferGeometry().setFromPoints([a,b]);
+  const l = new THREE.Line(g, mat);
+  if(mat.isLineDashedMaterial) l.computeLineDistances();
+  root.add(l);
+  return l;
+}
+function sphere(p, color=0xc85b05, r=0.035){
+  const m = new THREE.Mesh(new THREE.SphereGeometry(r, 24, 16), new THREE.MeshStandardMaterial({color}));
+  m.position.copy(p);
+  root.add(m);
+}
+function textSprite(txt, pos){
+  const canvas = document.createElement("canvas");
+  canvas.width=256; canvas.height=128;
+  const c = canvas.getContext("2d");
+  c.font="bold 54px Georgia";
+  c.fillStyle="#1f2937";
+  c.textAlign="center"; c.textBaseline="middle";
+  c.fillText(txt,128,64);
+  const tex = new THREE.CanvasTexture(canvas);
+  const sp = new THREE.Sprite(new THREE.SpriteMaterial({map:tex, transparent:true}));
+  sp.position.copy(pos);
+  sp.scale.set(0.22,0.11,1);
+  root.add(sp);
+}
+function drawSolid(kind){
+  clear();
+  [vertices,edges,faces] = solids[kind]();
+  vertices = vertices.map(vec);
+  faces.forEach(makeFace);
+  edges.forEach(([a,b])=>line(vertices[a], vertices[b]));
+  const names = ["A","B","C","D","E","F","G","H","V"];
+  vertices.forEach((p,i)=>textSprite(names[i] || String(i), p.clone().add(new THREE.Vector3(0.03,0.03,0.06))));
+}
+function planeFrom3(p1,p2,p3){
+  const n = p2.clone().sub(p1).cross(p3.clone().sub(p1));
+  if(n.length()<1e-8) throw new Error("Zadané body leží v jedné přímce, rovinu neurčí.");
+  n.normalize();
+  const d = -n.dot(p1);
+  return {n,d};
+}
+function intersectSegmentPlane(a,b,plane){
+  const da = plane.n.dot(a)+plane.d;
+  const db = plane.n.dot(b)+plane.d;
+  const eps=1e-7;
+  if(Math.abs(da)<eps && Math.abs(db)<eps) return null;
+  if(da*db>eps) return null;
+  const t = da/(da-db);
+  if(t<-eps || t>1+eps) return null;
+  return a.clone().lerp(b, t);
+}
+function uniquePoints(ps){
+  const out=[];
+  for(const p of ps){
+    if(!out.some(q=>q.distanceTo(p)<1e-5)) out.push(p);
+  }
+  return out;
+}
+function orderPolygon(ps, normal){
+  const center = ps.reduce((s,p)=>s.add(p), new THREE.Vector3()).multiplyScalar(1/ps.length);
+  let u = ps[0].clone().sub(center).normalize();
+  let v = normal.clone().cross(u).normalize();
+  return ps.slice().sort((a,b)=>{
+    const aa = Math.atan2(a.clone().sub(center).dot(v), a.clone().sub(center).dot(u));
+    const bb = Math.atan2(b.clone().sub(center).dot(v), b.clone().sub(center).dot(u));
+    return aa-bb;
+  });
+}
+function drawCut(ps, normal){
+  const ordered = orderPolygon(ps, normal);
+  const geom = new THREE.BufferGeometry();
+  const tris=[];
+  for(let i=1;i<ordered.length-1;i++) tris.push(ordered[0],ordered[i],ordered[i+1]);
+  geom.setFromPoints(tris);
+  geom.computeVertexNormals();
+  const mesh = new THREE.Mesh(geom, cutMat);
+  root.add(mesh);
+  for(let i=0;i<ordered.length;i++) line(ordered[i], ordered[(i+1)%ordered.length], new THREE.LineBasicMaterial({color:0x16a34a}));
+  ordered.forEach(p=>sphere(p,0x16a34a,0.03));
+}
+function compute(){
+  drawSolid(document.getElementById("solid").value);
+  const p1=parsePoint(document.getElementById("p1").value);
+  const p2=parsePoint(document.getElementById("p2").value);
+  const p3=parsePoint(document.getElementById("p3").value);
+  [p1,p2,p3].forEach((p,i)=>{ sphere(p,0xc85b05,0.045); textSprite("P"+(i+1), p.clone().add(new THREE.Vector3(0.04,0.04,0.08))); });
+  line(p1,p2,helperMat); line(p2,p3,helperMat); line(p3,p1,helperMat);
+  const plane = planeFrom3(p1,p2,p3);
+  const cuts = [];
+  edges.forEach(([i,j])=>{
+    const p = intersectSegmentPlane(vertices[i], vertices[j], plane);
+    if(p) cuts.push(p);
+  });
+  const uniq = uniquePoints(cuts);
+  if(uniq.length < 3) throw new Error("Rovina těleso neprotíná v mnohoúhelníku. Zkus jiné body.");
+  drawCut(uniq, plane.n);
+  document.getElementById("status").textContent = "Řez nalezen: " + uniq.length + " vrcholů";
+  document.getElementById("explain").innerHTML =
+    "Program určil rovinu třemi zadanými body P₁, P₂, P₃. Potom prošel všechny hrany tělesa a našel místa, kde je rovina protíná. Z těchto průsečíků vznikl zelený mnohoúhelník řezu.";
+}
+function resize(){
+  const r = view.getBoundingClientRect();
+  renderer.setSize(r.width, r.height);
+  camera.aspect = r.width/r.height;
+  camera.updateProjectionMatrix();
+}
+function preset(){
+  const kind = document.getElementById("solid").value;
+  const sets = {
+    cube:["0, 0.2, 1","1, 0.85, 0.3","0.25, 1, 0.65"],
+    cuboid:["0, 0.15, 0.75","1.35, 0.65, 0.25","0.25, 0.8, 0.55"],
+    triPrism:["0.1, 0, 0.75","1.0, 0, 0.25","0.35, 0.95, 0.45"],
+    pyramid:["0.1, 0, 0","1.15, 0.7, 0","0.58, 0.5, 0.72"],
+    tetra:["0.15, 0, 0","0.85, 0.45, 0","0.55, 0.42, 0.75"]
+  };
+  [p1.value,p2.value,p3.value] = sets[kind];
+  compute();
+}
+document.getElementById("solid").addEventListener("change", ()=>{ preset(); });
+document.getElementById("compute").addEventListener("click", ()=>{
+  try{ compute(); }catch(e){
+    document.getElementById("status").textContent = "Chyba";
+    document.getElementById("explain").textContent = e.message;
+  }
+});
+document.getElementById("preset").addEventListener("click", preset);
+document.getElementById("resetCam").addEventListener("click", ()=>{
+  camera.position.set(2.4,2.1,2.5);
+  controls.target.set(0.5,0.5,0.45);
+});
+window.addEventListener("resize", resize);
+resize();
+preset();
+
+function animate(){
+  requestAnimationFrame(animate);
+  controls.update();
+  renderer.render(scene,camera);
+}
+animate();
+</script>
+</body>
+</html>
