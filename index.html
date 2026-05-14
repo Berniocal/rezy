@@ -146,6 +146,18 @@
       <div class="drawStatus" id="drawStatus">Režim kreslení je vypnutý.</div>
     </div>
 
+    <div class="drawPanel">
+      <div class="stepTitle">Postup pro žáky</div>
+      <button class="ghost" id="recordSteps" type="button">Nahrávat postup</button>
+      <button class="ghost" id="copyStudentLink" type="button">Zkopírovat odkaz</button>
+      <div class="stepControls" id="playbackControls" style="margin-top:8px;display:none">
+        <button id="playPrev" type="button">←</button>
+        <div class="stepText" id="playStepText">0/0</div>
+        <button id="playNext" type="button">→</button>
+      </div>
+      <div class="drawStatus" id="recordStatus">Nahrávání je vypnuté.</div>
+    </div>
+
     <div class="help">
       Oranžové body P₁, P₂, P₃ můžeš chytit myší. Pohybují se vždy pouze po hraně nebo po přímce procházející danou hranou.
       <br><br>
@@ -247,6 +259,11 @@ let firstLine = null;
 let manualLines = [];
 let intersectionSnapItems = [];
 let snapMeshes = [];
+let recording = false;
+let recordedProcedure = null;
+let playbackProcedure = null;
+let playbackStep = 0;
+let suppressRecording = false;
 const raycaster = new THREE.Raycaster();
 raycaster.params.Line.threshold = 0.06;
 const pointer = new THREE.Vector2();
@@ -586,6 +603,161 @@ function updateDrawStatus(text){
   if(el) el.textContent = text;
 }
 
+
+function updateRecordStatus(text){
+  const el = document.getElementById('recordStatus');
+  if(el) el.textContent = text;
+}
+
+function pointArray(p){
+  return [Number(p.x.toFixed(5)), Number(p.y.toFixed(5)), Number(p.z.toFixed(5))];
+}
+
+function vecFromArray(a){
+  return new THREE.Vector3(a[0], a[1], a[2]);
+}
+
+function currentPointArrays(){
+  const pts = pointMeshes.length ? pointMeshes.map(m=>m.position.clone()) : readInputPoints();
+  return pts.map(pointArray);
+}
+
+function startRecording(){
+  recording = true;
+  suppressRecording = false;
+  recordedProcedure = {
+    solid: document.getElementById("solid").value,
+    projection: activeProjection,
+    points: currentPointArrays(),
+    steps: []
+  };
+  const btn = document.getElementById('recordSteps');
+  if(btn){
+    btn.textContent = 'Ukončit nahrávání';
+    btn.classList.add('drawOn');
+  }
+  updateRecordStatus('Nahrávání běží. Kresli přímky, rovnoběžky a nakonec zobraz řez.');
+}
+
+async function stopRecording(){
+  recording = false;
+  const btn = document.getElementById('recordSteps');
+  if(btn){
+    btn.textContent = 'Nahrávat postup';
+    btn.classList.remove('drawOn');
+  }
+  if(!recordedProcedure) return;
+  recordedProcedure.points = currentPointArrays();
+  const url = makeProcedureUrl(recordedProcedure);
+  history.replaceState(null, '', url);
+  let copied = false;
+  try{
+    await navigator.clipboard.writeText(url);
+    copied = true;
+  }catch(e){
+    copied = false;
+  }
+  updateRecordStatus(copied ? 'Hotovo. Odkaz je v adresním řádku a zkopírovaný ve schránce.' : 'Hotovo. Odkaz je v adresním řádku.');
+}
+
+function encodeProcedure(data){
+  const json = JSON.stringify(data);
+  const bytes = new TextEncoder().encode(json);
+  let bin = '';
+  bytes.forEach(b=>bin += String.fromCharCode(b));
+  return btoa(bin).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
+}
+
+function decodeProcedure(s){
+  const b64 = s.replace(/-/g,'+').replace(/_/g,'/');
+  const bin = atob(b64 + '='.repeat((4 - b64.length % 4) % 4));
+  const bytes = Uint8Array.from(bin, ch=>ch.charCodeAt(0));
+  return JSON.parse(new TextDecoder().decode(bytes));
+}
+
+function makeProcedureUrl(data){
+  const base = location.href.split('#')[0];
+  return base + '#postup=' + encodeProcedure(data);
+}
+
+function loadProcedureFromHash(){
+  const m = location.hash.match(/^#postup=(.+)$/);
+  if(!m) return false;
+  try{
+    playbackProcedure = decodeProcedure(m[1]);
+    playbackStep = 0;
+    setupPlayback(playbackProcedure);
+    return true;
+  }catch(e){
+    updateRecordStatus('Odkaz s postupem se nepodařilo načíst.');
+    return false;
+  }
+}
+
+function setupPlayback(proc){
+  suppressRecording = true;
+  recording = false;
+  document.getElementById("solid").value = proc.solid || 'cube';
+  (proc.points || []).forEach((pt,idx)=>{
+    if(idx < 3){
+      document.getElementById(`p${idx+1}x`).value = pt[0];
+      document.getElementById(`p${idx+1}y`).value = pt[1];
+      document.getElementById(`p${idx+1}z`).value = pt[2];
+    }
+  });
+  cutVisible = false;
+  compute();
+  applyProjectionMode(proc.projection || activeProjection || 'perspective');
+  document.getElementById('playbackControls').style.display = 'grid';
+  updateRecordStatus('Načten žákovský postup. Pomocí šipek procházej jednotlivé kroky.');
+  renderPlaybackStep(0);
+  suppressRecording = false;
+}
+
+function renderPlaybackStep(stepIndex){
+  if(!playbackProcedure) return;
+  playbackStep = Math.max(0, Math.min(stepIndex, playbackProcedure.steps.length));
+  suppressRecording = true;
+  clearGroup(manualLineRoot);
+  manualLines = [];
+  intersectionSnapItems = [];
+  resetManualSelection();
+  cutVisible = false;
+  clearGroup(cutRoot);
+
+  for(let i=0;i<playbackStep;i++){
+    const step = playbackProcedure.steps[i];
+    if(step.type === 'line'){
+      drawInfiniteManualLine(vecFromArray(step.a), vecFromArray(step.b));
+    }else if(step.type === 'parallel'){
+      drawInfiniteManualLineFromDirection(vecFromArray(step.point), vecFromArray(step.dir), 'rovnoběžka');
+    }else if(step.type === 'cut'){
+      cutVisible = true;
+      recomputeOnlyCut();
+    }
+  }
+  if(!cutVisible) recomputeOnlyCut();
+  rebuildSnapPoints();
+  const total = playbackProcedure.steps.length;
+  const txt = document.getElementById('playStepText');
+  if(txt) txt.textContent = `${playbackStep}/${total}`;
+  document.getElementById('playPrev').disabled = playbackStep === 0;
+  document.getElementById('playNext').disabled = playbackStep === total;
+  suppressRecording = false;
+}
+
+function recordStep(step){
+  if(!recording || suppressRecording || !recordedProcedure) return;
+  recordedProcedure.steps.push(step);
+  updateRecordStatus(`Nahráno kroků: ${recordedProcedure.steps.length}`);
+}
+
+function recordCurrentCutIfNeeded(){
+  if(recording && !suppressRecording && cutVisible){
+    recordStep({type:'cut'});
+  }
+}
+
 function createPointDragControls(){
   if(dragControls) dragControls.dispose();
   dragControls = null;
@@ -737,6 +909,7 @@ function handleLineDrawClick(event){
   }
   if(snap === firstSnap) return;
   drawInfiniteManualLine(firstSnap.userData.snapPoint, snap.userData.snapPoint);
+  recordStep({type:'line', a:pointArray(firstSnap.userData.snapPoint), b:pointArray(snap.userData.snapPoint)});
   updateDrawStatus(`Přímka ${firstSnap.userData.snapLabel}${snap.userData.snapLabel} nakreslena. Klikni na další první bod.`);
   resetManualSelection();
   rebuildSnapPoints();
@@ -759,6 +932,7 @@ function handleParallelDrawClick(event){
   const snap = getClickedSnap(event);
   if(!snap) return;
   drawInfiniteManualLineFromDirection(snap.userData.snapPoint, firstLine.userData.direction, `rovnoběžka`);
+  recordStep({type:'parallel', point:pointArray(snap.userData.snapPoint), dir:pointArray(firstLine.userData.direction)});
   updateDrawStatus(`Rovnoběžka bodem ${snap.userData.snapLabel} nakreslena. Klikni na další přímku.`);
   resetManualSelection();
   rebuildSnapPoints();
@@ -1142,6 +1316,7 @@ document.getElementById("compute").addEventListener("click", ()=>{
   try{
     cutVisible = !cutVisible;
     recomputeOnlyCut();
+    recordCurrentCutIfNeeded();
   }catch(e){
     document.getElementById("status").textContent = "Chyba";
     document.getElementById("explain").textContent = e.message;
@@ -1173,11 +1348,32 @@ document.getElementById("clearLines").addEventListener("click", ()=>{
   resetManualSelection();
   rebuildSnapPoints();
 });
+
+document.getElementById("recordSteps").addEventListener("click", ()=>{
+  if(recording) stopRecording();
+  else startRecording();
+});
+
+document.getElementById("copyStudentLink").addEventListener("click", async ()=>{
+  const proc = recordedProcedure || playbackProcedure;
+  const url = proc ? makeProcedureUrl(proc) : location.href;
+  history.replaceState(null, '', url);
+  try{
+    await navigator.clipboard.writeText(url);
+    updateRecordStatus('Odkaz zkopírován do schránky.');
+  }catch(e){
+    updateRecordStatus('Odkaz je v adresním řádku. Zkopíruj ho ručně.');
+  }
+});
+
+document.getElementById("playPrev").addEventListener("click", ()=>renderPlaybackStep(playbackStep - 1));
+document.getElementById("playNext").addEventListener("click", ()=>renderPlaybackStep(playbackStep + 1));
+
 renderer.domElement.addEventListener("pointerdown", handleDrawPointer);
 
 window.addEventListener("resize", resize);
 resize();
-preset();
+if(!loadProcedureFromHash()) preset();
 
 function animate(){
   requestAnimationFrame(animate);
