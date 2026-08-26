@@ -167,7 +167,7 @@
       <br><br>
       Krychlička vpravo nahoře nastavuje pohled: shora, zepředu, zprava atd.
       <br><br>
-      Souřadnice zapisuj do samostatných kolonek <code>x</code>, <code>y</code>, <code>z</code>. Po změně se bod přesune a řez přepočítá.<br><br>V režimu „Kreslit přímky“ klikni na jeden bod a potom na druhý. Oranžové body P₁–P₃ se v tomto režimu neposouvají, ale slouží jako obyčejné klikací body. Přichytává se také k vrcholům a k pravoúhlým průmětům bodů do rovin stěn.<br><br>V režimu „Kreslit rovnoběžku“ nejdřív klikni na už nakreslenou přímku a potom na bod, kterým má nová rovnoběžka procházet. Když nakreslená přímka nebo rovnoběžka protne jinou přímku nebo hranu tělesa, vznikne v průsečíku nový klikací bod X.
+      Souřadnice zapisuj do samostatných kolonek <code>x</code>, <code>y</code>, <code>z</code>. Po změně se bod přesune a řez přepočítá.<br><br>V režimu „Kreslit přímky“ klikni na jeden bod a potom na druhý. Oranžové body P₁–P₃ se v tomto režimu neposouvají, ale slouží jako obyčejné klikací body. Přichytává se také k vrcholům a k pravoúhlým průmětům bodů do rovin stěn. Klávesou <code>Esc</code> kreslení kdykoli ukončíš.<br><br>V režimu „Kreslit rovnoběžku“ nejdřív klikni na už nakreslenou přímku a potom na bod, kterým má nová rovnoběžka procházet. Když nakreslená přímka nebo rovnoběžka protne jinou přímku nebo hranu tělesa, vznikne v průsečíku nový klikací bod X.
     </div>
   </aside>
 
@@ -469,12 +469,12 @@ function getBounds(){
   return {min:box.min, max:box.max};
 }
 
-function addSnapPoint(pos, label, color=0x7c3aed){
+function addSnapPoint(pos, label, color=0x7c3aed, showLabel=true){
   const m = sphere(pos, color, 0.032, snapRoot);
   m.userData.snapPoint = pos.clone();
   m.userData.snapLabel = label;
   snapMeshes.push(m);
-  textSprite(label, pos.clone().add(new THREE.Vector3(0.035,0.035,0.045)), snapRoot);
+  if(showLabel) textSprite(label, pos.clone().add(new THREE.Vector3(0.035,0.035,0.045)), snapRoot);
   return m;
 }
 
@@ -482,9 +482,9 @@ function samePoint(a,b){
   return a.distanceTo(b) < 1e-5;
 }
 
-function addUniqueSnap(list, pos, label, color){
+function addUniqueSnap(list, pos, label, color, showLabel=true){
   if(list.some(item=>samePoint(item.pos,pos))) return;
-  list.push({pos:pos.clone(), label, color});
+  list.push({pos:pos.clone(), label, color, showLabel});
 }
 
 function closestPointsOnTwoLines(p1, d1, p2, d2){
@@ -572,7 +572,9 @@ function rebuildSnapPoints(){
   rebuildIntersectionSnapItems();
 
   const items = [];
-  vertices.forEach((p,i)=>addUniqueSnap(items, p, vertexNames[i] || String(i), 0x2563eb));
+  // Vrcholy už mají své popisky v rootu. V režimu kreslení vytvoříme pouze
+  // klikací snap značku, ale jejich A–H/V podruhé nevykreslujeme.
+  vertices.forEach((p,i)=>addUniqueSnap(items, p, vertexNames[i] || String(i), 0x2563eb, false));
   // Oranžové body P₁–P₃ se v režimu kreslení používají přímo jako klikací body,
   // proto pro ně nevytváříme duplicitní pomocné snap body.
 
@@ -595,7 +597,7 @@ function rebuildSnapPoints(){
 
   intersectionSnapItems.forEach(item=>addUniqueSnap(items, item.pos, item.label, item.color));
 
-  items.forEach(item=>addSnapPoint(item.pos, item.label, item.color));
+  items.forEach(item=>addSnapPoint(item.pos, item.label, item.color, item.showLabel));
 }
 
 function updateDrawStatus(text){
@@ -825,9 +827,9 @@ function setDrawTool(tool, on){
   if(!drawMode){
     updateDrawStatus('Režim kreslení je vypnutý. Oranžové body lze zase posouvat.');
   }else if(drawTool === 'line'){
-    updateDrawStatus('Klikni na první bod přímky. Oranžové body jsou teď jen klikací, nejdou posouvat.');
+    updateDrawStatus('Klikni na první bod přímky. Oranžové body jsou teď jen klikací, nejdou posouvat. Esc kreslení ukončí.');
   }else{
-    updateDrawStatus('Klikni na už nakreslenou přímku, podle které chceš vést rovnoběžku.');
+    updateDrawStatus('Klikni na už nakreslenou přímku, podle které chceš vést rovnoběžku. Esc kreslení ukončí.');
   }
   rebuildSnapPoints();
 }
@@ -1370,6 +1372,13 @@ document.getElementById("playPrev").addEventListener("click", ()=>renderPlayback
 document.getElementById("playNext").addEventListener("click", ()=>renderPlaybackStep(playbackStep + 1));
 
 renderer.domElement.addEventListener("pointerdown", handleDrawPointer);
+
+window.addEventListener("keydown", (event)=>{
+  if(event.key === "Escape" && drawMode){
+    event.preventDefault();
+    setDrawTool(drawTool, false);
+  }
+});
 
 window.addEventListener("resize", resize);
 resize();
