@@ -297,6 +297,14 @@
       color:var(--muted);
       min-height:40px;
     }
+    .lesson-player{display:flex;align-items:center;justify-content:center;gap:8px;flex-wrap:wrap;padding:8px 12px;border-top:1px solid var(--border);background:var(--panel)}
+    .lesson-player[hidden]{display:none}
+    .lesson-player button{flex:0 0 auto;min-height:38px}
+    .lesson-counter{min-width:74px;text-align:center;font-weight:700;font-size:14px}
+    #vpp-tool.lesson-playback .vpp-side{opacity:.42;pointer-events:none;user-select:none}
+    #vpp-tool.lesson-playback .stage-actions{display:none}
+    #recordBtn[data-active="true"]{border-color:#dc2626;background:#fee2e2;color:#991b1b}
+    .record-count{margin-top:7px;font-size:13px;color:var(--muted);font-weight:600}
     .edge{
       stroke:var(--text);
       stroke-width:2.25;
@@ -418,6 +426,11 @@
           <button type="button" id="saveImageBtn">Uložit obrázek</button>
           <button type="button" id="fullscreenBtn">⛶ Celá obrazovka</button>
         </div>
+        <div id="lessonPlayer" class="lesson-player" hidden>
+          <button type="button" id="lessonPrev">← Předchozí</button>
+          <span id="lessonCounter" class="lesson-counter">1 / 1</span>
+          <button type="button" id="lessonNext">Další →</button>
+        </div>
         <div id="status" class="vpp-status" aria-live="polite">Vyber těleso nebo rýsovací nástroj.</div>
       </div>
 
@@ -479,6 +492,15 @@
           </div>
         </section>
 
+        <section class="vpp-group" id="lessonPanel">
+          <div class="vpp-label">Postup pro žáky</div>
+          <div class="vpp-row">
+            <button type="button" id="recordBtn">● Nahrávat postup</button>
+            <button type="button" id="copyLessonBtn" disabled>🔗 Kopírovat odkaz</button>
+          </div>
+          <div id="recordCount" class="record-count">Kroky: 0</div>
+        </section>
+
         <section class="vpp-group" id="rotationPanel">
           <div class="vpp-label">Otáčení tělesa</div>
           <div class="vpp-row" style="margin-bottom:8px">
@@ -536,6 +558,13 @@
     const fullscreenBtn=root.querySelector('#fullscreenBtn');
     const autoRotateBtn=root.querySelector('#autoRotateBtn');
     const rotationSpeedInput=root.querySelector('#rotationSpeed');
+    const recordBtn=root.querySelector('#recordBtn');
+    const copyLessonBtn=root.querySelector('#copyLessonBtn');
+    const recordCount=root.querySelector('#recordCount');
+    const lessonPlayer=root.querySelector('#lessonPlayer');
+    const lessonPrev=root.querySelector('#lessonPrev');
+    const lessonNext=root.querySelector('#lessonNext');
+    const lessonCounter=root.querySelector('#lessonCounter');
 
     const SHOW_LABELS=true;
     const DASH_HIDDEN_EDGES=true;
@@ -2374,11 +2403,70 @@
       if(hadAction) status.textContent='Kreslení nebo výběr řezu zrušen.';
     });
 
+    const lessonState={recording:false,steps:[],lastSignature:'',playback:false,playbackSteps:[],playbackIndex:0,preparedLink:''};
+
+    function deepCloneLesson(v){ return v==null?v:JSON.parse(JSON.stringify(v)); }
+    function roundLesson(v){ return Math.round((Number(v)||0)*100000)/100000; }
+    function makeLessonSnapshot(){
+      return {sh:state.shape,crx:roundLesson(state.cameraRx),cry:roundLesson(state.cameraRy),crz:roundLesson(state.cameraRz),orx:roundLesson(state.objectRx),ory:roundLesson(state.objectRy),orz:roundLesson(state.objectRz),dx:roundLesson(state.depthX),dy:roundLesson(state.depthY),z:roundLesson(state.zoom),fv:state.activeFixedView||null,d:deepCloneLesson(state.drawings),p:deepCloneLesson(state.freePoints),s:deepCloneLesson(state.sectionHighlight)};
+    }
+    function updateRecordUi(){
+      recordCount.textContent='Kroky: '+lessonState.steps.length;
+      recordBtn.textContent=lessonState.recording?'■ Ukončit nahrávání':'● Nahrávat postup';
+      recordBtn.dataset.active=String(lessonState.recording);
+      copyLessonBtn.disabled=lessonState.recording||lessonState.steps.length<2;
+    }
+    function recordLessonStep(){
+      if(!lessonState.recording||lessonState.playback)return;
+      const snap=makeLessonSnapshot(), sig=JSON.stringify(snap);
+      if(sig===lessonState.lastSignature)return;
+      lessonState.steps.push(snap); lessonState.lastSignature=sig; lessonState.preparedLink=''; updateRecordUi();
+    }
+    function startLessonRecording(){ lessonState.recording=true;lessonState.steps=[];lessonState.lastSignature='';lessonState.preparedLink='';recordLessonStep();updateRecordUi();status.textContent='Nahrávání postupu spuštěno.'; }
+    function stopLessonRecording(){ if(!lessonState.recording)return;recordLessonStep();lessonState.recording=false;updateRecordUi();status.textContent=lessonState.steps.length>1?'Nahrávání ukončeno. Odkaz je připraven.':'Nahrávání ukončeno. Pro sdílení udělej alespoň jeden krok.'; }
+
+    function bytesToB64u(bytes){ let bin='';for(let i=0;i<bytes.length;i+=32768)bin+=String.fromCharCode(...bytes.subarray(i,i+32768));return btoa(bin).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,''); }
+    function b64uToBytes(s){ const b=s.replace(/-/g,'+').replace(/_/g,'/'),p=b+'='.repeat((4-b.length%4)%4),bin=atob(p),a=new Uint8Array(bin.length);for(let i=0;i<bin.length;i++)a[i]=bin.charCodeAt(i);return a; }
+    async function encodeLesson(textValue){
+      const raw=new TextEncoder().encode(textValue);
+      if('CompressionStream'in window){try{const stream=new Blob([raw]).stream().pipeThrough(new CompressionStream('deflate'));const buf=await new Response(stream).arrayBuffer();return'z'+bytesToB64u(new Uint8Array(buf));}catch(_){}}
+      return'r'+bytesToB64u(raw);
+    }
+    async function decodeLesson(payload){
+      const mode=payload[0],bytes=b64uToBytes(payload.slice(1));
+      if(mode==='z'){if(!('DecompressionStream'in window))throw new Error('unsupported');const stream=new Blob([bytes]).stream().pipeThrough(new DecompressionStream('deflate'));return new TextDecoder().decode(await new Response(stream).arrayBuffer());}
+      if(mode==='r')return new TextDecoder().decode(bytes);throw new Error('format');
+    }
+    async function buildLessonLink(){ const payload=await encodeLesson(JSON.stringify({v:1,steps:lessonState.steps}));const u=new URL(location.href);u.hash='postup='+payload;return u.toString(); }
+    async function copyCompat(value){ if(navigator.clipboard&&window.isSecureContext){await navigator.clipboard.writeText(value);return;}const ta=document.createElement('textarea');ta.value=value;ta.style.position='fixed';ta.style.opacity='0';document.body.appendChild(ta);ta.select();document.execCommand('copy');ta.remove(); }
+    async function copyLessonLink(){
+      if(lessonState.steps.length<2)return;
+      try{copyLessonBtn.disabled=true;copyLessonBtn.textContent='Připravuji…';const link=lessonState.preparedLink||await buildLessonLink();lessonState.preparedLink=link;await copyCompat(link);status.textContent=location.protocol==='file:'?'Odkaz zkopírován. Pro žáky bude fungovat po umístění stránky na web.':'Odkaz na postup zkopírován.';}catch(_){status.textContent='Odkaz se nepodařilo zkopírovat.';}finally{copyLessonBtn.textContent='🔗 Kopírovat odkaz';updateRecordUi();}
+    }
+    function applyLessonSnapshot(s){
+      stopAutoRotation();state.shape=s.sh||'cube';shapeSel.value=state.shape;state.cameraRx=Number(s.crx)||0;state.cameraRy=Number(s.cry)||0;state.cameraRz=Number(s.crz)||0;state.objectRx=Number(s.orx)||0;state.objectRy=Number(s.ory)||0;state.objectRz=Number(s.orz)||0;state.depthX=Number.isFinite(Number(s.dx))?Number(s.dx):DEPTH;state.depthY=Number.isFinite(Number(s.dy))?Number(s.dy):-DEPTH;state.zoom=Number.isFinite(Number(s.z))?Number(s.z):1;state.activeFixedView=s.fv||null;state.drawings=deepCloneLesson(s.d||[]);state.freePoints=deepCloneLesson(s.p||[]);state.sectionHighlight=deepCloneLesson(s.s||null);state.pending=[];state.selectedDrawings=[];state.sectionMode=false;state.hover=null;state.hoverDirection=null;state.history=[];root.querySelectorAll('[data-fixed-view]').forEach(b=>b.dataset.active=String(b.dataset.fixedView===state.activeFixedView));updateSelectionUi();render();
+    }
+    function updateLessonPlayer(){ const n=lessonState.playbackSteps.length,i=lessonState.playbackIndex;lessonCounter.textContent=(i+1)+' / '+n;lessonPrev.disabled=i<=0;lessonNext.disabled=i>=n-1; }
+    function showLessonStep(i){ if(!lessonState.playbackSteps.length)return;lessonState.playbackIndex=Math.max(0,Math.min(lessonState.playbackSteps.length-1,i));applyLessonSnapshot(lessonState.playbackSteps[lessonState.playbackIndex]);updateLessonPlayer();status.textContent='Postup: krok '+(lessonState.playbackIndex+1)+' z '+lessonState.playbackSteps.length+'.'; }
+    function enterLessonPlayback(steps){ lessonState.playback=true;lessonState.playbackSteps=steps;lessonState.playbackIndex=0;lessonState.recording=false;stopAutoRotation();state.mouseRotate=false;mouseRotateBtn.dataset.active='false';mouseRotateBtn.setAttribute('aria-pressed','false');mouseRotateBtn.textContent='🔒 Otáčení myší zamčeno';root.classList.add('lesson-playback');lessonPlayer.hidden=false;showLessonStep(0); }
+    async function loadLessonFromHash(){ const m=location.hash.match(/^#postup=(.+)$/);if(!m)return;try{const data=JSON.parse(await decodeLesson(m[1]));if(data?.v!==1||!Array.isArray(data.steps)||!data.steps.length)throw new Error('bad');enterLessonPlayback(data.steps);}catch(_){status.textContent='Sdílený postup se nepodařilo načíst.';} }
+
+    recordBtn.addEventListener('click',()=>lessonState.recording?stopLessonRecording():startLessonRecording());
+    copyLessonBtn.addEventListener('click',copyLessonLink);
+    lessonPrev.addEventListener('click',()=>showLessonStep(lessonState.playbackIndex-1));
+    lessonNext.addEventListener('click',()=>showLessonStep(lessonState.playbackIndex+1));
+    root.addEventListener('click',()=>{if(lessonState.recording)setTimeout(recordLessonStep,0);},true);
+    shapeSel.addEventListener('change',()=>{if(lessonState.recording)setTimeout(recordLessonStep,0);});
+    svg.addEventListener('pointerup',()=>{if(lessonState.recording)setTimeout(recordLessonStep,0);});
+    svg.addEventListener('pointercancel',()=>{if(lessonState.recording)setTimeout(recordLessonStep,0);});
+    updateRecordUi();
+
     setTool(null);
     updateSelectionUi();
     root.querySelectorAll('[data-fixed-view]').forEach(b=>b.dataset.active=String(b.dataset.fixedView==='rightTop'));
     root.querySelectorAll('.color-swatch').forEach(b=>b.dataset.active=String(b.dataset.color.toLowerCase()===state.currentColor.toLowerCase()));
     render();
+    loadLessonFromHash();
   })();
   </script>
 </body>
