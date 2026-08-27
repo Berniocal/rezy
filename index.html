@@ -2425,6 +2425,161 @@
     function startLessonRecording(){ lessonState.recording=true;lessonState.steps=[];lessonState.lastSignature='';lessonState.preparedLink='';recordLessonStep();updateRecordUi();status.textContent='Nahrávání postupu spuštěno.'; }
     function stopLessonRecording(){ if(!lessonState.recording)return;recordLessonStep();lessonState.recording=false;updateRecordUi();status.textContent=lessonState.steps.length>1?'Nahrávání ukončeno. Odkaz je připraven.':'Nahrávání ukončeno. Pro sdílení udělej alespoň jeden krok.'; }
 
+    // Kompaktní formát postupu v2.
+    // Nejčastější hodnoty nepíšeme jako dlouhé názvy, ale jako malá čísla.
+    // Navíc se po prvním kroku ukládají jen změny oproti kroku předchozímu.
+    const LESSON_SHAPES=['cube','cuboid','pyramid','irregularPrism'];
+    const LESSON_VIEWS=[null,'rightTop','leftTop','leftBottom','rightBottom'];
+    const LESSON_TYPES=['segment','line','parallel','perpendicular'];
+    const LESSON_COLORS=['#111827','#dc2626','#f97316','#eab308','#16a34a','#0891b2','#2563eb','#7c3aed'];
+    const LESSON_FRACTIONS=[1/5,1/4,1/3,2/5,1/2,3/5,2/3,3/4,4/5];
+
+    function qLesson(v,scale=10000){ return Math.round((Number(v)||0)*scale); }
+    function uqLesson(v,scale=10000){ return Number(v||0)/scale; }
+    function lessonIndexOr(list,value,fallback=0){ const i=list.indexOf(value);return i>=0?i:fallback; }
+    function packLessonColor(color){ const i=LESSON_COLORS.indexOf(String(color||'').toLowerCase());return i>=0?i:(color||LESSON_COLORS[7]); }
+    function unpackLessonColor(value){ return Number.isInteger(value)?(LESSON_COLORS[value]||LESSON_COLORS[7]):(value||LESSON_COLORS[7]); }
+    function packFraction(t){
+      for(let i=0;i<LESSON_FRACTIONS.length;i++) if(Math.abs(Number(t)-LESSON_FRACTIONS[i])<1e-8) return i;
+      return 'x'+qLesson(t,100000);
+    }
+    function unpackFraction(v){ return typeof v==='number'?(LESSON_FRACTIONS[v]??0.5):uqLesson(String(v).slice(1),100000); }
+
+    function packLessonPoint(p){
+      if(!p) return null;
+      switch(p.kind){
+        case 'vertex': return [0,p.index|0];
+        case 'edgeFraction': return [1,p.edgeIndex|0,packFraction(p.t)];
+        case 'drawingFraction': return [2,p.drawingIndex|0,packFraction(p.t)];
+        case 'intersection3d': return [3,qLesson(p.local?.[0]),qLesson(p.local?.[1]),qLesson(p.local?.[2])];
+        case 'free3d': return [4,qLesson(p.local?.[0]),qLesson(p.local?.[1]),qLesson(p.local?.[2]),packLessonColor(p.color)];
+        case 'intersectionDD': return [5,p.i|0,p.j|0];
+        case 'intersectionDE': return [6,p.drawingIndex|0,p.edgeIndex|0];
+        default: return [9,p];
+      }
+    }
+    function unpackLessonPoint(a){
+      if(!a) return null;
+      switch(a[0]){
+        case 0:return {kind:'vertex',index:a[1]};
+        case 1:return {kind:'edgeFraction',edgeIndex:a[1],t:unpackFraction(a[2])};
+        case 2:return {kind:'drawingFraction',drawingIndex:a[1],t:unpackFraction(a[2])};
+        case 3:return {kind:'intersection3d',local:[uqLesson(a[1]),uqLesson(a[2]),uqLesson(a[3])],snapText:'průsečík'};
+        case 4:return {kind:'free3d',local:[uqLesson(a[1]),uqLesson(a[2]),uqLesson(a[3])],color:unpackLessonColor(a[4])};
+        case 5:return {kind:'intersectionDD',i:a[1],j:a[2]};
+        case 6:return {kind:'intersectionDE',drawingIndex:a[1],edgeIndex:a[2]};
+        case 9:return a[1];
+        default:return null;
+      }
+    }
+
+    function packLessonDrawing(d){
+      const out=[
+        lessonIndexOr(LESSON_TYPES,d.type,0),
+        packLessonPoint(d.a),
+        packLessonPoint(d.b),
+        packLessonColor(d.color)
+      ];
+      if(d.hidden) out.push(1);
+      return out;
+    }
+    function unpackLessonDrawing(a){
+      return {a:unpackLessonPoint(a[1]),b:unpackLessonPoint(a[2]),type:LESSON_TYPES[a[0]]||'segment',color:unpackLessonColor(a[3]),hidden:Boolean(a[4])};
+    }
+
+    function packLessonSection(s){
+      if(!s||!Array.isArray(s.points)) return null;
+      return [packLessonColor(s.color),s.points.map(p=>[qLesson(p[0]),qLesson(p[1]),qLesson(p[2])])];
+    }
+    function unpackLessonSection(a){
+      if(!a) return null;
+      return {color:unpackLessonColor(a[0]),points:(a[1]||[]).map(p=>[uqLesson(p[0]),uqLesson(p[1]),uqLesson(p[2])])};
+    }
+
+    function packLessonSnapshot(s){
+      return [
+        lessonIndexOr(LESSON_SHAPES,s.sh,0),
+        qLesson(s.crx),qLesson(s.cry),qLesson(s.crz),
+        qLesson(s.orx),qLesson(s.ory),qLesson(s.orz),
+        qLesson(s.dx),qLesson(s.dy),qLesson(s.z,1000),
+        lessonIndexOr(LESSON_VIEWS,s.fv,0),
+        (s.d||[]).map(packLessonDrawing),
+        (s.p||[]).map(packLessonPoint),
+        packLessonSection(s.s)
+      ];
+    }
+    function unpackLessonSnapshot(a){
+      return {
+        sh:LESSON_SHAPES[a[0]]||'cube',
+        crx:uqLesson(a[1]),cry:uqLesson(a[2]),crz:uqLesson(a[3]),
+        orx:uqLesson(a[4]),ory:uqLesson(a[5]),orz:uqLesson(a[6]),
+        dx:uqLesson(a[7]),dy:uqLesson(a[8]),z:uqLesson(a[9],1000),
+        fv:LESSON_VIEWS[a[10]]||null,
+        d:(a[11]||[]).map(unpackLessonDrawing),
+        p:(a[12]||[]).map(unpackLessonPoint),
+        s:unpackLessonSection(a[13])
+      };
+    }
+
+    function packedEqual(a,b){ return JSON.stringify(a)===JSON.stringify(b); }
+    function packArrayDelta(prev,next){
+      if(packedEqual(prev,next)) return null;
+      const changes=[];
+      const n=Math.max(prev.length,next.length);
+      for(let i=0;i<n;i++){
+        if(i>=next.length) continue;
+        if(i>=prev.length || !packedEqual(prev[i],next[i])) changes.push([i,next[i]]);
+      }
+      return [next.length,changes];
+    }
+    function applyArrayDelta(prev,delta){
+      const len=delta[0], changes=delta[1]||[];
+      const out=prev.slice(0,len);
+      out.length=len;
+      for(const [i,v] of changes) out[i]=v;
+      return out;
+    }
+
+    function compactLessonSteps(steps){
+      const packed=steps.map(packLessonSnapshot);
+      if(!packed.length) return [2,[],[]];
+      const diffs=[];
+      let prev=packed[0];
+      for(let k=1;k<packed.length;k++){
+        const cur=packed[k];
+        let mask=0;
+        const vals=[];
+        for(let i=0;i<=10;i++){
+          if(cur[i]!==prev[i]){ mask|=(1<<i);vals.push(cur[i]); }
+        }
+        const dd=packArrayDelta(prev[11],cur[11]);
+        if(dd){mask|=(1<<11);vals.push(dd);}
+        const dp=packArrayDelta(prev[12],cur[12]);
+        if(dp){mask|=(1<<12);vals.push(dp);}
+        if(!packedEqual(prev[13],cur[13])){mask|=(1<<13);vals.push(cur[13]);}
+        diffs.push([mask,...vals]);
+        prev=cur;
+      }
+      return [2,packed[0],diffs];
+    }
+
+    function expandCompactLesson(data){
+      if(!Array.isArray(data)||data[0]!==2) throw new Error('compact format');
+      if(!Array.isArray(data[1])||!data[1].length) return [];
+      let cur=JSON.parse(JSON.stringify(data[1]));
+      const out=[unpackLessonSnapshot(cur)];
+      for(const diff of (data[2]||[])){
+        const mask=diff[0]||0;
+        let j=1;
+        for(let i=0;i<=10;i++) if(mask&(1<<i)) cur[i]=diff[j++];
+        if(mask&(1<<11)) cur[11]=applyArrayDelta(cur[11],diff[j++]);
+        if(mask&(1<<12)) cur[12]=applyArrayDelta(cur[12],diff[j++]);
+        if(mask&(1<<13)) cur[13]=diff[j++];
+        out.push(unpackLessonSnapshot(cur));
+      }
+      return out;
+    }
+
     function bytesToB64u(bytes){ let bin='';for(let i=0;i<bytes.length;i+=32768)bin+=String.fromCharCode(...bytes.subarray(i,i+32768));return btoa(bin).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,''); }
     function b64uToBytes(s){ const b=s.replace(/-/g,'+').replace(/_/g,'/'),p=b+'='.repeat((4-b.length%4)%4),bin=atob(p),a=new Uint8Array(bin.length);for(let i=0;i<bin.length;i++)a[i]=bin.charCodeAt(i);return a; }
     async function encodeLesson(textValue){
@@ -2437,7 +2592,7 @@
       if(mode==='z'){if(!('DecompressionStream'in window))throw new Error('unsupported');const stream=new Blob([bytes]).stream().pipeThrough(new DecompressionStream('deflate'));return new TextDecoder().decode(await new Response(stream).arrayBuffer());}
       if(mode==='r')return new TextDecoder().decode(bytes);throw new Error('format');
     }
-    async function buildLessonLink(){ const payload=await encodeLesson(JSON.stringify({v:1,steps:lessonState.steps}));const u=new URL(location.href);u.hash='postup='+payload;return u.toString(); }
+    async function buildLessonLink(){ const compact=compactLessonSteps(lessonState.steps);const payload=await encodeLesson(JSON.stringify(compact));const u=new URL(location.href);u.hash='p='+payload;return u.toString(); }
     async function copyCompat(value){ if(navigator.clipboard&&window.isSecureContext){await navigator.clipboard.writeText(value);return;}const ta=document.createElement('textarea');ta.value=value;ta.style.position='fixed';ta.style.opacity='0';document.body.appendChild(ta);ta.select();document.execCommand('copy');ta.remove(); }
     async function copyLessonLink(){
       if(lessonState.steps.length<2)return;
@@ -2449,7 +2604,7 @@
     function updateLessonPlayer(){ const n=lessonState.playbackSteps.length,i=lessonState.playbackIndex;lessonCounter.textContent=(i+1)+' / '+n;lessonPrev.disabled=i<=0;lessonNext.disabled=i>=n-1; }
     function showLessonStep(i){ if(!lessonState.playbackSteps.length)return;lessonState.playbackIndex=Math.max(0,Math.min(lessonState.playbackSteps.length-1,i));applyLessonSnapshot(lessonState.playbackSteps[lessonState.playbackIndex]);updateLessonPlayer();status.textContent='Postup: krok '+(lessonState.playbackIndex+1)+' z '+lessonState.playbackSteps.length+'.'; }
     function enterLessonPlayback(steps){ lessonState.playback=true;lessonState.playbackSteps=steps;lessonState.playbackIndex=0;lessonState.recording=false;stopAutoRotation();state.mouseRotate=false;mouseRotateBtn.dataset.active='false';mouseRotateBtn.setAttribute('aria-pressed','false');mouseRotateBtn.textContent='🔒 Otáčení myší zamčeno';root.classList.add('lesson-playback');lessonPlayer.hidden=false;showLessonStep(0); }
-    async function loadLessonFromHash(){ const m=location.hash.match(/^#postup=(.+)$/);if(!m)return;try{const data=JSON.parse(await decodeLesson(m[1]));if(data?.v!==1||!Array.isArray(data.steps)||!data.steps.length)throw new Error('bad');enterLessonPlayback(data.steps);}catch(_){status.textContent='Sdílený postup se nepodařilo načíst.';} }
+    async function loadLessonFromHash(){ const m=location.hash.match(/^#(?:p|postup)=(.+)$/);if(!m)return;try{const data=JSON.parse(await decodeLesson(m[1]));let steps;if(Array.isArray(data)&&data[0]===2)steps=expandCompactLesson(data);else if(data?.v===1&&Array.isArray(data.steps))steps=data.steps;else throw new Error('bad');if(!steps.length)throw new Error('empty');enterLessonPlayback(steps);}catch(_){status.textContent='Sdílený postup se nepodařilo načíst.';} }
 
     recordBtn.addEventListener('click',()=>lessonState.recording?stopLessonRecording():startLessonRecording());
     copyLessonBtn.addEventListener('click',copyLessonLink);
