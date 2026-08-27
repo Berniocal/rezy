@@ -297,7 +297,8 @@
       color:var(--muted);
       min-height:40px;
     }
-    .lesson-player{display:flex;align-items:center;justify-content:center;gap:8px;flex-wrap:wrap;padding:8px 12px;border-top:1px solid var(--border);background:var(--panel)}
+    .lesson-player{display:flex;align-items:center;justify-content:center;gap:8px;flex-wrap:wrap;padding:8px 12px;background:var(--panel)}
+    .lesson-player-top{border-bottom:1px solid var(--border)}
     .lesson-player[hidden]{display:none}
     .lesson-player button{flex:0 0 auto;min-height:38px}
     .lesson-counter{min-width:74px;text-align:center;font-weight:700;font-size:14px}
@@ -410,6 +411,11 @@
 
     <div class="vpp-layout">
       <div class="vpp-stage">
+        <div id="lessonPlayer" class="lesson-player lesson-player-top" hidden>
+          <button type="button" id="lessonPrev">← Předchozí</button>
+          <span id="lessonCounter" class="lesson-counter">1 / 1</span>
+          <button type="button" id="lessonNext">Další →</button>
+        </div>
         <svg id="vpp-svg" viewBox="0 0 720 520" role="img" aria-label="Interaktivní prostorové těleso a rýsovací plocha">
           <g id="grid"></g>
           <g id="object-hidden"></g>
@@ -425,11 +431,6 @@
           <button type="button" id="undo">↶ Zpět</button>
           <button type="button" id="saveImageBtn">Uložit obrázek</button>
           <button type="button" id="fullscreenBtn">⛶ Celá obrazovka</button>
-        </div>
-        <div id="lessonPlayer" class="lesson-player" hidden>
-          <button type="button" id="lessonPrev">← Předchozí</button>
-          <span id="lessonCounter" class="lesson-counter">1 / 1</span>
-          <button type="button" id="lessonNext">Další →</button>
         </div>
         <div id="status" class="vpp-status" aria-live="polite">Vyber těleso nebo rýsovací nástroj.</div>
       </div>
@@ -499,6 +500,10 @@
             <button type="button" id="copyLessonBtn" disabled>🔗 Kopírovat odkaz</button>
           </div>
           <div id="recordCount" class="record-count">Kroky: 0</div>
+          <div id="lessonLinkWrap" style="margin-top:8px" hidden>
+            <input id="lessonLinkInput" type="text" readonly aria-label="Odkaz na postup"
+              style="width:100%;min-height:38px;padding:7px 9px;border:1px solid var(--border);border-radius:8px;background:var(--card);color:var(--text);font-size:12px">
+          </div>
         </section>
 
         <section class="vpp-group" id="rotationPanel">
@@ -561,6 +566,8 @@
     const recordBtn=root.querySelector('#recordBtn');
     const copyLessonBtn=root.querySelector('#copyLessonBtn');
     const recordCount=root.querySelector('#recordCount');
+    const lessonLinkWrap=root.querySelector('#lessonLinkWrap');
+    const lessonLinkInput=root.querySelector('#lessonLinkInput');
     const lessonPlayer=root.querySelector('#lessonPlayer');
     const lessonPrev=root.querySelector('#lessonPrev');
     const lessonNext=root.querySelector('#lessonNext');
@@ -2422,8 +2429,31 @@
       if(sig===lessonState.lastSignature)return;
       lessonState.steps.push(snap); lessonState.lastSignature=sig; lessonState.preparedLink=''; updateRecordUi();
     }
-    function startLessonRecording(){ lessonState.recording=true;lessonState.steps=[];lessonState.lastSignature='';lessonState.preparedLink='';recordLessonStep();updateRecordUi();status.textContent='Nahrávání postupu spuštěno.'; }
-    function stopLessonRecording(){ if(!lessonState.recording)return;recordLessonStep();lessonState.recording=false;updateRecordUi();status.textContent=lessonState.steps.length>1?'Nahrávání ukončeno. Odkaz je připraven.':'Nahrávání ukončeno. Pro sdílení udělej alespoň jeden krok.'; }
+    function startLessonRecording(){
+      lessonState.recording=true;
+      lessonState.steps=[];
+      lessonState.lastSignature='';
+      lessonState.preparedLink='';
+      lessonLinkInput.value='';
+      lessonLinkWrap.hidden=true;
+      recordLessonStep();
+      updateRecordUi();
+      status.textContent='Nahrávání postupu spuštěno.';
+    }
+    function stopLessonRecording(){
+      if(!lessonState.recording)return;
+      recordLessonStep();
+      lessonState.recording=false;
+      updateRecordUi();
+      if(lessonState.steps.length>1){
+        status.textContent='Nahrávání ukončeno. Připravuji odkaz…';
+        prepareLessonLinkDisplay();
+      }else{
+        lessonLinkInput.value='';
+        lessonLinkWrap.hidden=true;
+        status.textContent='Nahrávání ukončeno. Pro sdílení udělej alespoň jeden krok.';
+      }
+    }
 
     // Kompaktní formát postupu v2.
     // Nejčastější hodnoty nepíšeme jako dlouhé názvy, ale jako malá čísla.
@@ -2593,10 +2623,41 @@
       if(mode==='r')return new TextDecoder().decode(bytes);throw new Error('format');
     }
     async function buildLessonLink(){ const compact=compactLessonSteps(lessonState.steps);const payload=await encodeLesson(JSON.stringify(compact));const u=new URL(location.href);u.hash='p='+payload;return u.toString(); }
+    async function prepareLessonLinkDisplay(){
+      if(lessonState.steps.length<2)return '';
+      try{
+        const link=lessonState.preparedLink||await buildLessonLink();
+        lessonState.preparedLink=link;
+        lessonLinkInput.value=link;
+        lessonLinkWrap.hidden=false;
+        status.textContent='Nahrávání ukončeno. Odkaz je připraven.';
+        return link;
+      }catch(_){
+        lessonLinkInput.value='';
+        lessonLinkWrap.hidden=true;
+        status.textContent='Odkaz se nepodařilo připravit.';
+        return '';
+      }
+    }
+
     async function copyCompat(value){ if(navigator.clipboard&&window.isSecureContext){await navigator.clipboard.writeText(value);return;}const ta=document.createElement('textarea');ta.value=value;ta.style.position='fixed';ta.style.opacity='0';document.body.appendChild(ta);ta.select();document.execCommand('copy');ta.remove(); }
     async function copyLessonLink(){
       if(lessonState.steps.length<2)return;
-      try{copyLessonBtn.disabled=true;copyLessonBtn.textContent='Připravuji…';const link=lessonState.preparedLink||await buildLessonLink();lessonState.preparedLink=link;await copyCompat(link);status.textContent=location.protocol==='file:'?'Odkaz zkopírován. Pro žáky bude fungovat po umístění stránky na web.':'Odkaz na postup zkopírován.';}catch(_){status.textContent='Odkaz se nepodařilo zkopírovat.';}finally{copyLessonBtn.textContent='🔗 Kopírovat odkaz';updateRecordUi();}
+      try{
+        copyLessonBtn.disabled=true;
+        copyLessonBtn.textContent='Kopíruji…';
+        const link=lessonLinkInput.value||lessonState.preparedLink||await prepareLessonLinkDisplay();
+        if(!link)throw new Error('no link');
+        await copyCompat(link);
+        status.textContent=location.protocol==='file:'
+          ?'Odkaz zkopírován. Pro žáky bude fungovat po umístění stránky na web.'
+          :'Odkaz na postup zkopírován.';
+      }catch(_){
+        status.textContent='Odkaz se nepodařilo zkopírovat.';
+      }finally{
+        copyLessonBtn.textContent='🔗 Kopírovat odkaz';
+        updateRecordUi();
+      }
     }
     function applyLessonSnapshot(s){
       stopAutoRotation();state.shape=s.sh||'cube';shapeSel.value=state.shape;state.cameraRx=Number(s.crx)||0;state.cameraRy=Number(s.cry)||0;state.cameraRz=Number(s.crz)||0;state.objectRx=Number(s.orx)||0;state.objectRy=Number(s.ory)||0;state.objectRz=Number(s.orz)||0;state.depthX=Number.isFinite(Number(s.dx))?Number(s.dx):DEPTH;state.depthY=Number.isFinite(Number(s.dy))?Number(s.dy):-DEPTH;state.zoom=Number.isFinite(Number(s.z))?Number(s.z):1;state.activeFixedView=s.fv||null;state.drawings=deepCloneLesson(s.d||[]);state.freePoints=deepCloneLesson(s.p||[]);state.sectionHighlight=deepCloneLesson(s.s||null);state.pending=[];state.selectedDrawings=[];state.sectionMode=false;state.hover=null;state.hoverDirection=null;state.history=[];root.querySelectorAll('[data-fixed-view]').forEach(b=>b.dataset.active=String(b.dataset.fixedView===state.activeFixedView));updateSelectionUi();render();
@@ -2608,6 +2669,7 @@
 
     recordBtn.addEventListener('click',()=>lessonState.recording?stopLessonRecording():startLessonRecording());
     copyLessonBtn.addEventListener('click',copyLessonLink);
+    lessonLinkInput.addEventListener('click',()=>lessonLinkInput.select());
     lessonPrev.addEventListener('click',()=>showLessonStep(lessonState.playbackIndex-1));
     lessonNext.addEventListener('click',()=>showLessonStep(lessonState.playbackIndex+1));
     root.addEventListener('click',()=>{if(lessonState.recording)setTimeout(recordLessonStep,0);},true);
