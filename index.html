@@ -449,6 +449,52 @@
       stroke-width:2;
       vector-effect:non-scaling-stroke;
     }
+    .point-selection{
+      fill:none;
+      stroke:var(--accent);
+      stroke-width:2;
+      stroke-dasharray:4 3;
+      vector-effect:non-scaling-stroke;
+      pointer-events:none;
+    }
+    .point-rename-inline{
+      position:absolute;
+      z-index:9;
+      display:flex;
+      align-items:center;
+      gap:4px;
+      padding:4px;
+      border:1px solid var(--accent);
+      border-radius:8px;
+      background:rgba(255,255,255,.98);
+      box-shadow:0 2px 8px rgba(15,23,42,.14);
+    }
+    .point-rename-inline[hidden]{display:none}
+    .point-rename-inline input{
+      width:92px;
+      min-width:0;
+      min-height:32px;
+      padding:4px 7px;
+      border:1px solid var(--border);
+      border-radius:6px;
+      background:#fff;
+      color:var(--text);
+      font-size:15px;
+      font-weight:700;
+      text-transform:uppercase;
+    }
+    .point-rename-inline button{
+      min-height:32px;
+      padding:4px 8px;
+      border-radius:6px;
+      flex:0 0 auto;
+      font-size:13px;
+      font-weight:700;
+    }
+    .point-name-label{
+      pointer-events:auto;
+      cursor:text;
+    }
     .intersection-point, .cross-point{
       stroke:var(--text);
       stroke-width:2;
@@ -577,6 +623,10 @@
           <g id="overlay"></g>
           <text x="16" y="500" class="axis-hint">Výchozí školní pohled: hloubkové hrany 45° · zkrácení 1/2</text>
         </svg>
+        <div id="pointRenameBox" class="point-rename-inline" hidden>
+          <input id="pointNameInput" type="text" maxlength="8" autocomplete="off" spellcheck="false" aria-label="Název bodu">
+          <button type="button" id="renamePointBtn">OK</button>
+        </div>
         <div class="stage-actions">
           <button type="button" id="undo">↶ Zpět</button>
           <button type="button" id="saveImageBtn">Uložit obrázek</button>
@@ -591,6 +641,7 @@
           <div class="stage-head-right">
             <small id="orthoModeInfo">Zobrazuje se rovina a část tělesa za ní</small>
             <button type="button" id="orthoModeBtn">Jen rovina</button>
+            <button type="button" id="orthoSideBtn" title="Otočit pravoúhlý pohled na opačnou stranu roviny">↔ Druhá strana</button>
           </div>
         </div>
         <svg id="ortho-svg" viewBox="0 0 720 360" role="img" aria-label="Pravoúhlý pohled rovinou">
@@ -679,6 +730,7 @@
   (()=> {
     const root=document.getElementById('vpp-tool');
     const svg=root.querySelector('#vpp-svg');
+    const mainStage=root.querySelector('.vpp-stage-main');
     const gGrid=root.querySelector('#grid');
     const gHidden=root.querySelector('#object-hidden');
     const gSection=root.querySelector('#section-fill');
@@ -693,6 +745,9 @@
     const mouseRotateBtn=root.querySelector('#mouseRotateBtn');
     const drawColorInput=root.querySelector('#drawColor');
     const toggleHideBtn=root.querySelector('#toggleHideBtn');
+    const pointRenameBox=root.querySelector('#pointRenameBox');
+    const pointNameInput=root.querySelector('#pointNameInput');
+    const renamePointBtn=root.querySelector('#renamePointBtn');
     const sectionBtn=root.querySelector('#sectionBtn');
     const clearSectionBtn=root.querySelector('#clearSectionBtn');
     const saveImageBtn=root.querySelector('#saveImageBtn');
@@ -721,6 +776,7 @@
     const gOrthoOver=root.querySelector('#ortho-overlay');
     const orthoModeBtn=root.querySelector('#orthoModeBtn');
     const orthoModeInfo=root.querySelector('#orthoModeInfo');
+    const orthoSideBtn=root.querySelector('#orthoSideBtn');
 
     const SHOW_LABELS=true;
     const DASH_HIDDEN_EDGES=true;
@@ -746,9 +802,11 @@
       tool:null,
       currentColor:'#7c3aed',
       selectedDrawings:[],
+      selectedPointIndex:null,
       activeFixedView:'rightTop',
       orthoPlaneSpec:'',
       orthoShowBehind:true,
+      orthoViewFlip:false,
       sectionMode:false,
       sectionHighlight:null,
       pending:[],
@@ -1082,12 +1140,29 @@
 
     function planeFromThreePoints(a,b,c){
       const ab=sub(b,a), ac=sub(c,a);
-      const n=normalize3(cross(ab,ac));
+      let n=normalize3(cross(ab,ac));
       if(!n) return null;
 
+      // Výchozí stranu volíme přirozeně „zvenku“ tělesa.
+      // Horní podstava se tím automaticky pozoruje shora,
+      // dolní podstava zdola. Pořadí písmen ABE / BEA na tom nic nemění.
+      const center=shapeCenterLocal();
+      const towardCenter=sub(center,a);
+      const centerSide=dot(n,towardCenter);
+      if(Math.abs(centerSide)>1e-7){
+        if(centerSide>0) n=scale3(n,-1); // normála má směřovat od středu tělesa
+      }else{
+        // U roviny procházející středem není „vnější“ strana jednoznačná.
+        // Jako výchozí vezmeme stranu přivrácenou aktuálnímu hlavnímu pohledu.
+        const baseDepth=worldToView(a)[1];
+        const plusDepth=worldToView(add3(a,n))[1];
+        if(plusDepth>baseDepth) n=scale3(n,-1);
+      }
+
+      if(state.orthoViewFlip) n=scale3(n,-1);
+
       // Školní orientace pomocného pravoúhlého pohledu:
-      // horizontála je průnik roviny s vodorovnou rovinou modelu,
-      // svislý směr vychází z modelové osy z.
+      // svislice v modelu zůstává svislá, vodorovné směry z podstavy vodorovné.
       const vertical=[0,0,1];
       let u=normalize3(cross(vertical,n));
       let v=null;
@@ -1095,9 +1170,8 @@
       if(u){
         v=normalize3(cross(n,u));
       }else{
-        // Vodorovná rovina: svislice je k ní kolmá, proto zvolíme
-        // stabilní vodorovnou orientaci podle první použitelné hrany.
-        const candidates=[ab,ac,[1,0,0],[0,1,0]];
+        // Vodorovná rovina (horní/dolní podstava): držíme stabilně modelovou osu x.
+        const candidates=[[1,0,0],[0,1,0],ab,ac];
         for(const cand of candidates){
           const proj=sub(cand,scale3(n,dot(cand,n)));
           u=normalize3(proj);
@@ -1109,8 +1183,9 @@
 
       if(!v) return null;
 
-      // Kladná modelová svislice má na obrazovce směřovat nahoru.
-      if(dot(v,vertical)<0){
+      // U nevodorovných rovin kladná modelová svislice směřuje na obrazovce nahoru.
+      const verticalProjection=sub(vertical,scale3(n,dot(vertical,n)));
+      if(len3(verticalProjection)>1e-7 && dot(v,vertical)<0){
         u=scale3(u,-1);
         v=scale3(v,-1);
       }
@@ -1118,12 +1193,23 @@
       return {point:[...a],normal:n,u,v};
     }
 
+    function pointDisplayName(p,index){
+      const custom=String(p?.name||'').trim();
+      return custom || ('P'+(index+1));
+    }
+
     function namedPointMap(){
       const map=new Map();
       shapes[state.shape].labels.forEach((lab,i)=>map.set(String(lab).toUpperCase(),{name:String(lab),local:[...shapes[state.shape].verts[i]],kind:'vertex',index:i}));
       state.freePoints.forEach((p,i)=>{
         const q=pointLocal(p);
-        if(q) map.set(('P'+(i+1)).toUpperCase(),{name:'P'+(i+1),local:q,kind:'free',index:i});
+        if(!q) return;
+        const stable='P'+(i+1);
+        const shown=pointDisplayName(p,i);
+        const item={name:shown,local:q,kind:'free',index:i};
+        // P1, P2… zůstává jako stabilní interní alias i po přejmenování.
+        map.set(stable.toUpperCase(),item);
+        map.set(shown.toUpperCase(),item);
       });
       return map;
     }
@@ -1133,8 +1219,7 @@
       if(!text) return {error:'Zadej tři body roviny, například A B E nebo A, P1, F.'};
       let tokens=[];
       if(/^[A-Za-z]{3}$/.test(text)) tokens=text.toUpperCase().split('');
-      else tokens=(text.toUpperCase().match(/P\d+|[A-Z]/g)||[]);
-      if(tokens.length===1 && /^[A-Z]{3}$/.test(tokens[0])) tokens=tokens[0].split('');
+      else tokens=text.toUpperCase().split(/[\s,;]+/).filter(Boolean);
       if(tokens.length!==3) return {error:'Zadej právě 3 body roviny, například A B E nebo A, P1, F.'};
       if(new Set(tokens).size!==3) return {error:'Body roviny musí být tři různé.'};
       const map=namedPointMap();
@@ -1161,16 +1246,10 @@
       return dot(plane.normal,sub(local,plane.point));
     }
 
-    function orthoBackSign(plane){
-      // Zvolíme tu stranu roviny, která je v aktuálním hlavním pohledu
-      // dál od pozorovatele. Tím vznikne chování typu „rovina + to za ní“.
-      const base=worldToView(plane.point)[1];
-      const plus=worldToView(add3(plane.point,plane.normal))[1];
-      return plus>=base ? 1 : -1;
-    }
-
     function orthoHalfspaceValue(local,plane){
-      return orthoBackSign(plane)*signedDistanceToOrthoPlane(local,plane);
+      // plane.normal míří z roviny k pozorovateli druhého pohledu.
+      // „Za rovinou“ je tedy opačná strana, tj. záporná podepsaná vzdálenost.
+      return -signedDistanceToOrthoPlane(local,plane);
     }
 
     function orthoPointOnPlane(local,plane){
@@ -1315,6 +1394,8 @@
         ? 'Zobrazuje se rovina a část tělesa za ní'
         : 'Zobrazuje se jen to, co leží v rovině';
       orthoModeBtn.textContent=state.orthoShowBehind ? 'Jen rovina' : 'Rovina + za ní';
+      orthoSideBtn.dataset.active=String(state.orthoViewFlip);
+      orthoSideBtn.textContent=state.orthoViewFlip ? '↔ Výchozí strana' : '↔ Druhá strana';
       const t=el('text',{x:360,y:180,'text-anchor':'middle','dominant-baseline':'middle',class:'ortho-hint'});
       t.textContent=message;
       gOrthoOver.append(t);
@@ -1343,6 +1424,8 @@
         ? 'Zobrazuje se rovina a část tělesa za ní'
         : 'Zobrazuje se jen to, co leží v rovině';
       orthoModeBtn.textContent=state.orthoShowBehind ? 'Jen rovina' : 'Rovina + za ní';
+      orthoSideBtn.dataset.active=String(state.orthoViewFlip);
+      orthoSideBtn.textContent=state.orthoViewFlip ? '↔ Výchozí strana' : '↔ Druhá strana';
 
       const view=orthoViewportFromPlane(parsed);
 
@@ -1450,6 +1533,7 @@
       });
 
       state.freePoints.forEach((p,i)=>{
+        if(p.hidden) return;
         const local=pointLocal(p);
         if(!local||!orthoKeepsPoint(local,parsed)) return;
         const q=orthoToScreen(orthoProjectLocal(local,parsed),view);
@@ -1460,7 +1544,7 @@
           gOrthoPts.append(el('circle',{cx:q.x,cy:q.y,r:4.3,class:'ortho-point',style:`stroke:${p.color||state.currentColor}`}));
         }
         const t=el('text',{x:q.x+7,y:q.y-7,class:'ortho-label'});
-        t.textContent='P'+(i+1);
+        t.textContent=pointDisplayName(p,i);
         gOrthoLab.append(t);
       });
 
@@ -1535,12 +1619,61 @@
       {t:4/5,label:'4/5'}
     ];
 
+    // Body na prodloužení hrany. Např. u CG:
+    // t > 1 = za G, t < 0 = za C. Hodnota je vždy vztažena k délce celé hrany CG.
+    const EDGE_EXTENSION_FRACTIONS=[
+      {t:1/5,label:'1/5'},
+      {t:1/4,label:'1/4'},
+      {t:1/3,label:'1/3'},
+      {t:2/5,label:'2/5'},
+      {t:1/2,label:'1/2'},
+      {t:3/5,label:'3/5'},
+      {t:2/3,label:'2/3'},
+      {t:3/4,label:'3/4'},
+      {t:4/5,label:'4/5'},
+      {t:1,label:'1'}
+    ];
+
+    function edgeName(edgeIndex){
+      const edge=shapes[state.shape].edges[edgeIndex];
+      if(!edge) return '';
+      const labels=shapes[state.shape].labels;
+      return `${labels[edge[0]]}${labels[edge[1]]}`;
+    }
+
+    function edgeExtensionSnapText(edgeIndex, fraction, side){
+      const edge=shapes[state.shape].edges[edgeIndex];
+      if(!edge) return fraction.label;
+      const labels=shapes[state.shape].labels;
+      const endLabel=side==='afterB' ? labels[edge[1]] : labels[edge[0]];
+      return `${fraction.label} za ${endLabel} (${edgeName(edgeIndex)})`;
+    }
+
     function divisionCandidates(){
       const out=[];
       const data=shapes[state.shape];
       data.edges.forEach((_,edgeIndex)=>{
+        // Dělení přímo na hraně.
         for(const f of DIVISION_FRACTIONS){
           out.push({kind:'edgeFraction',edgeIndex,t:f.t,snapText:f.label});
+        }
+
+        // A stejné školní zlomky i na obou prodlouženích hrany.
+        for(const f of EDGE_EXTENSION_FRACTIONS){
+          out.push({
+            kind:'edgeFraction',
+            edgeIndex,
+            t:1+f.t,
+            snapText:edgeExtensionSnapText(edgeIndex,f,'afterB'),
+            extension:true
+          });
+          out.push({
+            kind:'edgeFraction',
+            edgeIndex,
+            t:-f.t,
+            snapText:edgeExtensionSnapText(edgeIndex,f,'beforeA'),
+            extension:true
+          });
         }
       });
       state.drawings.forEach((d,drawingIndex)=>{
@@ -1631,19 +1764,93 @@
       return best;
     }
 
+    function nearestSelectablePoint(pt){
+      let best=null, bestDist=13;
+      for(let i=state.freePoints.length-1;i>=0;i--){
+        if(state.freePoints[i].hidden) continue;
+        const q=resolvePoint(state.freePoints[i]);
+        const d=Math.hypot(pt.x-q.x,pt.y-q.y);
+        if(d<bestDist){ bestDist=d; best=i; }
+      }
+      return best;
+    }
+
     function selectedDrawingIndexes(){
       return state.selectedDrawings.filter(i=>Number.isInteger(i) && state.drawings[i]);
     }
 
+    function positionPointRenameEditor(){
+      if(pointRenameBox.hidden) return;
+      const i=state.selectedPointIndex;
+      const p=Number.isInteger(i) ? state.freePoints[i] : null;
+      if(!p) return;
+
+      const q=resolvePoint(p);
+      const svgRect=svg.getBoundingClientRect();
+      const stageRect=mainStage.getBoundingClientRect();
+      const sx=svgRect.width/720;
+      const sy=svgRect.height/520;
+
+      let left=(svgRect.left-stageRect.left)+q.x*sx+12;
+      let top=(svgRect.top-stageRect.top)+q.y*sy-20;
+
+      const w=pointRenameBox.offsetWidth||142;
+      const h=pointRenameBox.offsetHeight||42;
+      left=Math.max(6,Math.min(stageRect.width-w-6,left));
+      top=Math.max(6,Math.min(stageRect.height-h-6,top));
+
+      pointRenameBox.style.left=left+'px';
+      pointRenameBox.style.top=top+'px';
+    }
+
+    function closePointRenameEditor(){
+      pointRenameBox.hidden=true;
+    }
+
+    function openPointRenameEditor(index){
+      if(!Number.isInteger(index) || !state.freePoints[index] || state.freePoints[index].hidden) return;
+      state.selectedPointIndex=index;
+      const p=state.freePoints[index];
+      pointNameInput.value=pointDisplayName(p,index);
+      pointRenameBox.hidden=false;
+      positionPointRenameEditor();
+
+      requestAnimationFrame(()=>{
+        positionPointRenameEditor();
+        pointNameInput.focus();
+        pointNameInput.select();
+      });
+    }
+
     function updateSelectionUi(){
       const selected=selectedDrawingIndexes();
-      const has=selected.length>0;
+      const pi=state.selectedPointIndex;
+      const point=Number.isInteger(pi) ? state.freePoints[pi] : null;
+      const hasDrawings=selected.length>0;
+      const hasPoint=Boolean(point);
+      const has=hasDrawings||hasPoint;
       toggleHideBtn.disabled=!has;
-      if(has){
-        const allHidden=selected.every(i=>state.drawings[i].hidden);
+
+      const hiddenStates=[
+        ...selected.map(i=>Boolean(state.drawings[i].hidden)),
+        ...(point?[Boolean(point.hidden)]:[])
+      ];
+      const allHidden=hiddenStates.length>0 && hiddenStates.every(Boolean);
+
+      if(hasPoint && !hasDrawings){
+        toggleHideBtn.textContent=allHidden?'Zobrazit bod':'Skrýt bod';
+      }else if(has){
         toggleHideBtn.textContent=allHidden?'Zobrazit vybrané':'Skrýt vybrané';
       }else{
         toggleHideBtn.textContent='Skrýt vybrané';
+      }
+
+      renamePointBtn.disabled=!point || Boolean(point.hidden);
+      if(!point || point.hidden){
+        if(!point) pointNameInput.value='';
+        closePointRenameEditor();
+      }else if(!pointRenameBox.hidden && document.activeElement!==pointNameInput){
+        pointNameInput.value=pointDisplayName(point,pi);
       }
     }
 
@@ -1836,6 +2043,9 @@
     }
 
     function pointLiesOnExistingGeometry(p){
+      // edgeFraction může mít t i mimo 0..1. Takový bod leží na prodloužení hrany
+      // a chceme ho stejně jako body na přímkách značit křížkem.
+      if(p?.kind==='edgeFraction') return true;
       const q=pointLocal(p);
       if(!q) return false;
       const tol=2e-5;
@@ -2017,6 +2227,7 @@
       }
 
       state.freePoints.forEach((p,i)=>{
+        if(p.hidden) return;
         const q=resolvePoint(p);
         // Vrchol sám je už bodem tělesa – nepřidáváme přes něj žádné kolečko ani křížek.
         if(p.kind!=='vertex'){
@@ -2027,8 +2238,16 @@
           }
           else gPts.append(el('circle',{cx:q.x,cy:q.y,r:4.3,class:'point',style:`stroke:${p.color||state.currentColor}`}));
 
-          const t=el('text',{x:q.x+7,y:q.y-7,class:'vertex-label'});
-          t.textContent='P'+(i+1);
+          if(state.selectedPointIndex===i){
+            gPts.append(el('circle',{cx:q.x,cy:q.y,r:9,class:'point-selection'}));
+          }
+          const t=el('text',{
+            x:q.x+7,
+            y:q.y-7,
+            class:'vertex-label point-name-label',
+            'data-point-index':i
+          });
+          t.textContent=pointDisplayName(p,i);
           gPts.append(t);
         }
       });
@@ -2219,6 +2438,7 @@
       renderDrawings();
       renderOverlay();
       renderOrthoView();
+      positionPointRenameEditor();
     }
 
     function coords(evt){
@@ -2245,11 +2465,12 @@
       }
       for(let i=0;i<state.freePoints.length;i++){
         const p=state.freePoints[i];
+        if(p.hidden) continue;
         const q=resolvePoint(p);
         const d=Math.hypot(pt.x-q.x,pt.y-q.y);
         if(d<bestDist){
           bestDist=d;
-          p.snapText='P'+(i+1);
+          p.snapText=pointDisplayName(p,i);
           best=p;
         }
       }
@@ -2289,12 +2510,16 @@
       const n=state.pending.length;
 
       if(state.tool===null){
-        status.textContent=state.selectedDrawings.length
-          ? (state.selectedDrawings.length===1 ? 'Vybrán 1 prvek.' : `Vybráno prvků: ${state.selectedDrawings.length}.`)
-          : 'Vyber nástroj nebo klikni na nakreslenou čáru.';
+        if(Number.isInteger(state.selectedPointIndex) && state.freePoints[state.selectedPointIndex]){
+          status.textContent='Vybraný bod '+pointDisplayName(state.freePoints[state.selectedPointIndex],state.selectedPointIndex)+'. Můžeš změnit jeho název.';
+        }else if(state.selectedDrawings.length){
+          status.textContent=state.selectedDrawings.length===1 ? 'Vybrán 1 prvek.' : `Vybráno prvků: ${state.selectedDrawings.length}.`;
+        }else{
+          status.textContent='Vyber nástroj nebo klikni na nakreslenou čáru či bod.';
+        }
       }
       if(state.tool==='point'){
-        status.textContent='Bod: klikni do plochy nebo na existující bod či dělení hrany.';
+        status.textContent='Bod: klikni do plochy, na existující bod, dělení hrany nebo na její prodloužení.';
       }
       if(state.tool==='segment'){
         status.textContent=n===0 ? 'Úsečka: vyber první bod.' : 'Úsečka: vyber druhý bod.';
@@ -2381,7 +2606,11 @@
       state.tool=tool;
       state.pending=[];
       state.hoverDirection=null;
-      if(tool!==null) state.selectedDrawings=[];
+      if(tool!==null) closePointRenameEditor();
+      if(tool!==null){
+        state.selectedDrawings=[];
+        state.selectedPointIndex=null;
+      }
 
       root.querySelectorAll('[data-tool]').forEach(b=>{
         const btnTool=b.dataset.tool==='none' ? null : b.dataset.tool;
@@ -2512,6 +2741,7 @@
       state.hover=null;
       state.hoverDirection=null;
       state.selectedDrawings=state.selectedDrawings.filter(i=>state.drawings[i]);
+      if(!Number.isInteger(state.selectedPointIndex) || !state.freePoints[state.selectedPointIndex]) state.selectedPointIndex=null;
       updateSelectionUi();
     }
 
@@ -2537,6 +2767,7 @@
       state.pending=[];
       state.history=[];
       state.selectedDrawings=[];
+      state.selectedPointIndex=null;
       state.sectionHighlight=null;
       state.sectionMode=false;
       state.activeFixedView='rightTop';
@@ -2681,6 +2912,75 @@
       });
     });
 
+    function renameSelectedPoint(){
+      const i=state.selectedPointIndex;
+      const p=Number.isInteger(i) ? state.freePoints[i] : null;
+      if(!p) return;
+
+      const oldName=pointDisplayName(p,i);
+      const name=(pointNameInput.value||'').trim().toUpperCase();
+      if(!/^[A-Z][A-Z0-9_]{0,7}$/.test(name)){
+        status.textContent='Název bodu musí začínat písmenem a může obsahovat písmena, číslice nebo _.';
+        pointNameInput.focus();
+        pointNameInput.select();
+        return;
+      }
+
+      const used=new Set(shapes[state.shape].labels.map(x=>String(x).toUpperCase()));
+      state.freePoints.forEach((q,j)=>{
+        if(j===i) return;
+        used.add(('P'+(j+1)).toUpperCase());
+        used.add(pointDisplayName(q,j).toUpperCase());
+      });
+      // Stabilní názvy P1, P2… ostatních bodů nesmí být obsazeny jiným bodem.
+      if(used.has(name)){
+        status.textContent='Název '+name+' už používá jiný bod nebo vrchol.';
+        pointNameInput.focus();
+        pointNameInput.select();
+        return;
+      }
+
+      pushHistory();
+      const defaultName='P'+(i+1);
+      if(name===defaultName) delete p.name;
+      else p.name=name;
+
+      // Pokud je přejmenovaný bod právě použitý v názvu pomocné roviny, přepiš i její zadání.
+      if(state.orthoPlaneSpec){
+        const tokens=state.orthoPlaneSpec.split(/\s+/).filter(Boolean);
+        let changed=false;
+        const replaced=tokens.map(token=>{
+          if(token.toUpperCase()===oldName.toUpperCase()){ changed=true; return name; }
+          return token;
+        });
+        if(changed){
+          state.orthoPlaneSpec=replaced.join(' ');
+          orthoPlaneInput.value=state.orthoPlaneSpec;
+        }
+      }
+
+      pointNameInput.value=pointDisplayName(p,i);
+      closePointRenameEditor();
+      render();
+      updateSelectionUi();
+      status.textContent='Bod '+oldName+' přejmenován na '+pointDisplayName(p,i)+'.';
+      if(typeof lessonState!=='undefined' && lessonState.recording) setTimeout(recordLessonStep,0);
+    }
+
+    renamePointBtn.addEventListener('click',renameSelectedPoint);
+    pointNameInput.addEventListener('keydown',e=>{
+      if(e.key==='Enter'){
+        e.preventDefault();
+        e.stopPropagation();
+        renameSelectedPoint();
+      }else if(e.key==='Escape'){
+        e.preventDefault();
+        e.stopPropagation();
+        closePointRenameEditor();
+        svg.focus?.();
+      }
+    });
+
     sectionBtn.addEventListener('click',()=>{
       state.sectionMode=!state.sectionMode;
       state.pending=[];
@@ -2709,13 +3009,33 @@
 
     toggleHideBtn.addEventListener('click',()=>{
       const selected=selectedDrawingIndexes();
-      if(!selected.length) return;
+      const pi=state.selectedPointIndex;
+      const point=Number.isInteger(pi) ? state.freePoints[pi] : null;
+      if(!selected.length && !point) return;
+
+      const hiddenStates=[
+        ...selected.map(i=>Boolean(state.drawings[i].hidden)),
+        ...(point?[Boolean(point.hidden)]:[])
+      ];
+      const makeHidden=!hiddenStates.every(Boolean);
+
       pushHistory();
-      const makeHidden=!selected.every(i=>state.drawings[i].hidden);
       selected.forEach(i=>{ state.drawings[i].hidden=makeHidden; });
+      if(point) point.hidden=makeHidden;
+
+      if(point && makeHidden) closePointRenameEditor();
       updateSelectionUi();
       render();
-      status.textContent=makeHidden?'Vybrané prvky jsou skryté.':'Vybrané prvky jsou znovu zobrazené.';
+
+      if(point && !selected.length){
+        status.textContent=makeHidden
+          ? 'Bod '+pointDisplayName(point,pi)+' je skrytý. Tlačítkem ho můžeš znovu zobrazit.'
+          : 'Bod '+pointDisplayName(point,pi)+' je znovu zobrazený.';
+      }else{
+        status.textContent=makeHidden
+          ? 'Vybrané prvky jsou skryté.'
+          : 'Vybrané prvky jsou znovu zobrazené.';
+      }
     });
 
 
@@ -2815,6 +3135,7 @@
         return;
       }
       state.orthoPlaneSpec=parsed.tokens.join(' ');
+      state.orthoViewFlip=false;
       orthoPlaneInput.value=state.orthoPlaneSpec;
       render();
       status.textContent='Pravoúhlý pohled rovinou '+state.orthoPlaneSpec+' zobrazen.';
@@ -2828,9 +3149,22 @@
         : 'Pravoúhlý pohled zobrazuje jen to, co leží v rovině.';
     });
 
+    orthoSideBtn.addEventListener('click',()=>{
+      if(!state.orthoPlaneSpec){
+        status.textContent='Nejprve zadej tři body roviny.';
+        return;
+      }
+      state.orthoViewFlip=!state.orthoViewFlip;
+      render();
+      status.textContent=state.orthoViewFlip
+        ? 'Pravoúhlý pohled otočen na druhou stranu roviny.'
+        : 'Pravoúhlý pohled vrácen na výchozí vnější stranu roviny.';
+    });
+
     showOrthoPlaneBtn.addEventListener('click',applyOrthoPlaneSpec);
     clearOrthoPlaneBtn.addEventListener('click',()=>{
       state.orthoPlaneSpec='';
+      state.orthoViewFlip=false;
       orthoPlaneInput.value='';
       render();
       status.textContent='Pravoúhlý pohled rovinou skryt.';
@@ -2861,6 +3195,7 @@
       state.sectionMode=false;
       sectionBtn.dataset.active='false';
       state.selectedDrawings=[];
+      state.selectedPointIndex=null;
       updateSelectionUi();
       setStatus();
       render();
@@ -2894,7 +3229,35 @@
       }
 
       if(state.tool===null){
+        const labelIndexRaw=e.target?.getAttribute?.('data-point-index');
+        const labelPointIdx=labelIndexRaw!==null && labelIndexRaw!==undefined
+          ? Number(labelIndexRaw)
+          : null;
+
+        if(Number.isInteger(labelPointIdx) && state.freePoints[labelPointIdx]){
+          state.selectedPointIndex=labelPointIdx;
+          if(!e.ctrlKey) state.selectedDrawings=[];
+          updateSelectionUi();
+          setStatus();
+          render();
+          openPointRenameEditor(labelPointIdx);
+          return;
+        }
+
+        const pointIdx=nearestSelectablePoint(pt);
+        if(pointIdx!==null){
+          state.selectedPointIndex=pointIdx;
+          if(!e.ctrlKey) state.selectedDrawings=[];
+          updateSelectionUi();
+          setStatus();
+          render();
+          openPointRenameEditor(pointIdx);
+          return;
+        }
+
+        closePointRenameEditor();
         const idx=nearestSelectableDrawing(pt);
+        if(!e.ctrlKey) state.selectedPointIndex=null;
         if(e.ctrlKey){
           if(idx!==null){
             const pos=state.selectedDrawings.indexOf(idx);
@@ -2996,7 +3359,7 @@
     function deepCloneLesson(v){ return v==null?v:JSON.parse(JSON.stringify(v)); }
     function roundLesson(v){ return Math.round((Number(v)||0)*100000)/100000; }
     function makeLessonSnapshot(){
-      return {sh:state.shape,crx:roundLesson(state.cameraRx),cry:roundLesson(state.cameraRy),crz:roundLesson(state.cameraRz),orx:roundLesson(state.objectRx),ory:roundLesson(state.objectRy),orz:roundLesson(state.objectRz),dx:roundLesson(state.depthX),dy:roundLesson(state.depthY),z:roundLesson(state.zoom),fv:state.activeFixedView||null,d:deepCloneLesson(state.drawings),p:deepCloneLesson(state.freePoints),s:deepCloneLesson(state.sectionHighlight),op:state.orthoPlaneSpec||'',ob:state.orthoShowBehind?1:0};
+      return {sh:state.shape,crx:roundLesson(state.cameraRx),cry:roundLesson(state.cameraRy),crz:roundLesson(state.cameraRz),orx:roundLesson(state.objectRx),ory:roundLesson(state.objectRy),orz:roundLesson(state.objectRz),dx:roundLesson(state.depthX),dy:roundLesson(state.depthY),z:roundLesson(state.zoom),fv:state.activeFixedView||null,d:deepCloneLesson(state.drawings),p:deepCloneLesson(state.freePoints),s:deepCloneLesson(state.sectionHighlight),op:state.orthoPlaneSpec||'',ob:state.orthoShowBehind?1:0,os:state.orthoViewFlip?1:0};
     }
     function updateRecordUi(){
       recordCount.textContent='Kroky: '+lessonState.steps.length;
@@ -3058,30 +3421,43 @@
 
     function packLessonPoint(p){
       if(!p) return null;
+      let out=null;
       switch(p.kind){
-        case 'vertex': return [0,p.index|0];
-        case 'edgeFraction': return [1,p.edgeIndex|0,packFraction(p.t)];
-        case 'drawingFraction': return [2,p.drawingIndex|0,packFraction(p.t)];
-        case 'intersection3d': return [3,qLesson(p.local?.[0]),qLesson(p.local?.[1]),qLesson(p.local?.[2])];
-        case 'free3d': return [4,qLesson(p.local?.[0]),qLesson(p.local?.[1]),qLesson(p.local?.[2]),packLessonColor(p.color)];
-        case 'intersectionDD': return [5,p.i|0,p.j|0];
-        case 'intersectionDE': return [6,p.drawingIndex|0,p.edgeIndex|0];
+        case 'vertex': out=[0,p.index|0]; break;
+        case 'edgeFraction': out=[1,p.edgeIndex|0,packFraction(p.t)]; break;
+        case 'drawingFraction': out=[2,p.drawingIndex|0,packFraction(p.t)]; break;
+        case 'intersection3d': out=[3,qLesson(p.local?.[0]),qLesson(p.local?.[1]),qLesson(p.local?.[2])]; break;
+        case 'free3d': out=[4,qLesson(p.local?.[0]),qLesson(p.local?.[1]),qLesson(p.local?.[2]),packLessonColor(p.color)]; break;
+        case 'intersectionDD': out=[5,p.i|0,p.j|0]; break;
+        case 'intersectionDE': out=[6,p.drawingIndex|0,p.edgeIndex|0]; break;
         default: return [9,p];
       }
+      if(p.name || p.hidden){
+        out.push(p.name||'');
+        if(p.hidden) out.push(1);
+      }
+      return out;
     }
+
     function unpackLessonPoint(a){
       if(!a) return null;
+      let p=null, metaIndex=null;
       switch(a[0]){
-        case 0:return {kind:'vertex',index:a[1]};
-        case 1:return {kind:'edgeFraction',edgeIndex:a[1],t:unpackFraction(a[2])};
-        case 2:return {kind:'drawingFraction',drawingIndex:a[1],t:unpackFraction(a[2])};
-        case 3:return {kind:'intersection3d',local:[uqLesson(a[1]),uqLesson(a[2]),uqLesson(a[3])],snapText:'průsečík'};
-        case 4:return {kind:'free3d',local:[uqLesson(a[1]),uqLesson(a[2]),uqLesson(a[3])],color:unpackLessonColor(a[4])};
-        case 5:return {kind:'intersectionDD',i:a[1],j:a[2]};
-        case 6:return {kind:'intersectionDE',drawingIndex:a[1],edgeIndex:a[2]};
+        case 0:p={kind:'vertex',index:a[1]}; metaIndex=2; break;
+        case 1:p={kind:'edgeFraction',edgeIndex:a[1],t:unpackFraction(a[2])}; metaIndex=3; break;
+        case 2:p={kind:'drawingFraction',drawingIndex:a[1],t:unpackFraction(a[2])}; metaIndex=3; break;
+        case 3:p={kind:'intersection3d',local:[uqLesson(a[1]),uqLesson(a[2]),uqLesson(a[3])],snapText:'průsečík'}; metaIndex=4; break;
+        case 4:p={kind:'free3d',local:[uqLesson(a[1]),uqLesson(a[2]),uqLesson(a[3])],color:unpackLessonColor(a[4])}; metaIndex=5; break;
+        case 5:p={kind:'intersectionDD',i:a[1],j:a[2]}; metaIndex=3; break;
+        case 6:p={kind:'intersectionDE',drawingIndex:a[1],edgeIndex:a[2]}; metaIndex=3; break;
         case 9:return a[1];
         default:return null;
       }
+      if(metaIndex!==null){
+        if(typeof a[metaIndex]==='string' && a[metaIndex]) p.name=a[metaIndex];
+        if(a[metaIndex+1]) p.hidden=true;
+      }
+      return p;
     }
 
     function packLessonDrawing(d){
@@ -3118,7 +3494,8 @@
         (s.p||[]).map(packLessonPoint),
         packLessonSection(s.s),
         s.op||'',
-        s.ob?1:0
+        s.ob?1:0,
+        s.os?1:0
       ];
     }
     function unpackLessonSnapshot(a){
@@ -3132,7 +3509,8 @@
         p:(a[12]||[]).map(unpackLessonPoint),
         s:unpackLessonSection(a[13]),
         op:a[14]||'',
-        ob:a[15]?1:0
+        ob:a[15]?1:0,
+        os:a[16]?1:0
       };
     }
 
@@ -3174,6 +3552,7 @@
         if(!packedEqual(prev[13],cur[13])){mask|=(1<<13);vals.push(cur[13]);}
         if(!packedEqual(prev[14],cur[14])){mask|=(1<<14);vals.push(cur[14]);}
         if(!packedEqual(prev[15],cur[15])){mask|=(1<<15);vals.push(cur[15]);}
+        if(!packedEqual(prev[16],cur[16])){mask|=(1<<16);vals.push(cur[16]);}
         diffs.push([mask,...vals]);
         prev=cur;
       }
@@ -3194,6 +3573,7 @@
         if(mask&(1<<13)) cur[13]=diff[j++];
         if(mask&(1<<14)) cur[14]=diff[j++];
         if(mask&(1<<15)) cur[15]=diff[j++];
+        if(mask&(1<<16)) cur[16]=diff[j++];
         out.push(unpackLessonSnapshot(cur));
       }
       return out;
@@ -3249,7 +3629,7 @@
       }
     }
     function applyLessonSnapshot(s){
-      stopAutoRotation();state.shape=s.sh||'cube';shapeSel.value=state.shape;state.cameraRx=Number(s.crx)||0;state.cameraRy=Number(s.cry)||0;state.cameraRz=Number(s.crz)||0;state.objectRx=Number(s.orx)||0;state.objectRy=Number(s.ory)||0;state.objectRz=Number(s.orz)||0;state.depthX=Number.isFinite(Number(s.dx))?Number(s.dx):DEPTH;state.depthY=Number.isFinite(Number(s.dy))?Number(s.dy):-DEPTH;state.zoom=Number.isFinite(Number(s.z))?Number(s.z):1;state.activeFixedView=s.fv||null;state.drawings=deepCloneLesson(s.d||[]);state.freePoints=deepCloneLesson(s.p||[]);state.sectionHighlight=deepCloneLesson(s.s||null);state.orthoPlaneSpec=s.op||'';state.orthoShowBehind=!(s.ob===0);orthoPlaneInput.value=state.orthoPlaneSpec;state.pending=[];state.selectedDrawings=[];state.sectionMode=false;state.hover=null;state.hoverDirection=null;state.history=[];root.querySelectorAll('[data-fixed-view]').forEach(b=>b.dataset.active=String(b.dataset.fixedView===state.activeFixedView));updateSelectionUi();render();
+      stopAutoRotation();state.shape=s.sh||'cube';shapeSel.value=state.shape;state.cameraRx=Number(s.crx)||0;state.cameraRy=Number(s.cry)||0;state.cameraRz=Number(s.crz)||0;state.objectRx=Number(s.orx)||0;state.objectRy=Number(s.ory)||0;state.objectRz=Number(s.orz)||0;state.depthX=Number.isFinite(Number(s.dx))?Number(s.dx):DEPTH;state.depthY=Number.isFinite(Number(s.dy))?Number(s.dy):-DEPTH;state.zoom=Number.isFinite(Number(s.z))?Number(s.z):1;state.activeFixedView=s.fv||null;state.drawings=deepCloneLesson(s.d||[]);state.freePoints=deepCloneLesson(s.p||[]);state.sectionHighlight=deepCloneLesson(s.s||null);state.orthoPlaneSpec=s.op||'';state.orthoShowBehind=!(s.ob===0);state.orthoViewFlip=Boolean(s.os);orthoPlaneInput.value=state.orthoPlaneSpec;state.pending=[];state.selectedDrawings=[];state.selectedPointIndex=null;state.sectionMode=false;state.hover=null;state.hoverDirection=null;state.history=[];root.querySelectorAll('[data-fixed-view]').forEach(b=>b.dataset.active=String(b.dataset.fixedView===state.activeFixedView));updateSelectionUi();render();
     }
     function updateLessonPlayer(){ const n=lessonState.playbackSteps.length,i=lessonState.playbackIndex;lessonCounter.textContent=(i+1)+' / '+n;lessonPrev.disabled=i<=0;lessonNext.disabled=i>=n-1; }
     function showLessonStep(i){ if(!lessonState.playbackSteps.length)return;lessonState.playbackIndex=Math.max(0,Math.min(lessonState.playbackSteps.length-1,i));applyLessonSnapshot(lessonState.playbackSteps[lessonState.playbackIndex]);updateLessonPlayer();status.textContent='Postup: krok '+(lessonState.playbackIndex+1)+' z '+lessonState.playbackSteps.length+'.'; }
@@ -3266,6 +3646,8 @@
     svg.addEventListener('pointerup',()=>{if(lessonState.recording)setTimeout(recordLessonStep,0);});
     svg.addEventListener('pointercancel',()=>{if(lessonState.recording)setTimeout(recordLessonStep,0);});
     updateRecordUi();
+
+    window.addEventListener('resize',positionPointRenameEditor);
 
     setTool(null);
     updateSelectionUi();
