@@ -40,6 +40,29 @@
       gap:14px;
       align-items:start;
     }
+    .vpp-topbar{
+      display:grid;
+      grid-template-columns:1.05fr 1.35fr 1.2fr 1.6fr;
+      gap:12px;
+      margin:0 0 14px;
+      align-items:start;
+    }
+    .vpp-topbar .vpp-group{
+      height:100%;
+    }
+    .vpp-topbar .vpp-label{
+      margin-bottom:8px;
+    }
+    .vpp-topbar .fixed-view-grid button{
+      min-height:40px;
+      font-size:14px;
+    }
+    .top-inline-help{
+      margin-top:6px;
+      color:var(--muted);
+      font-size:12px;
+      line-height:1.35;
+    }
     .vpp-stage{
       position:relative;
       border:1px solid var(--border);
@@ -47,6 +70,82 @@
       background:var(--card);
       overflow:hidden;
       min-width:0;
+    }
+    .vpp-stage-stack{
+      display:flex;
+      flex-direction:column;
+      gap:14px;
+      min-width:0;
+    }
+    .vpp-stage-ortho .stage-head{
+      display:flex;
+      justify-content:space-between;
+      gap:8px;
+      align-items:center;
+      padding:10px 12px;
+      border-bottom:1px solid var(--border);
+      background:var(--panel);
+      font-size:14px;
+      font-weight:700;
+    }
+    .vpp-stage-ortho .stage-head small{
+      font-size:12px;
+      font-weight:600;
+      color:var(--muted);
+    }
+    .stage-head-right{
+      display:flex;
+      align-items:center;
+      gap:10px;
+      flex-wrap:wrap;
+      justify-content:flex-end;
+    }
+    .stage-head-right button{
+      min-height:34px;
+      padding:6px 10px;
+      font-size:13px;
+    }
+    #ortho-svg text{
+      user-select:none;
+    }
+    .ortho-edge{
+      stroke:#94a3b8;
+      stroke-width:1.8;
+      fill:none;
+      vector-effect:non-scaling-stroke;
+    }
+    .ortho-drawing{
+      stroke-width:2.1;
+      fill:none;
+      stroke-linecap:round;
+      vector-effect:non-scaling-stroke;
+    }
+    .ortho-point{
+      stroke:#111827;
+      stroke-width:1.5;
+      fill:#fff;
+      vector-effect:non-scaling-stroke;
+    }
+    .ortho-cross{
+      stroke:#111827;
+      stroke-width:1.6;
+      vector-effect:non-scaling-stroke;
+    }
+    .ortho-plane-pick{
+      fill:#dbeafe;
+      stroke:#2563eb;
+      stroke-width:1.6;
+      vector-effect:non-scaling-stroke;
+    }
+    .ortho-label{
+      fill:#334155;
+      font-size:13px;
+      font-weight:700;
+    }
+    .ortho-hint{
+      fill:#6b7280;
+      font-size:14px;
+      font-weight:600;
     }
     .stage-actions{
       position:absolute;
@@ -79,7 +178,12 @@
     #vpp-tool:fullscreen .vpp-layout{
       grid-template-columns:minmax(0,1fr) 310px;
     }
-    #vpp-tool:fullscreen .vpp-stage{
+    #vpp-tool:fullscreen .vpp-stage-stack{
+      display:flex;
+      flex-direction:column;
+      gap:14px;
+    }
+    #vpp-tool:fullscreen .vpp-stage-main{
       min-height:calc(100vh - 110px);
       display:flex;
       flex-direction:column;
@@ -409,8 +513,54 @@
       <p>Krychle, kvádr, čtyřboký jehlan a nepravidelný čtyřboký hranol ve volném rovnoběžném promítání. Skryté hrany se automaticky kreslí čárkovaně.</p>
     </div>
 
+    <div class="vpp-topbar">
+      <section class="vpp-group">
+        <div class="vpp-label">Těleso</div>
+        <select id="shape" aria-label="Volba tělesa">
+          <option value="cube">Krychle</option>
+          <option value="cuboid">Kvádr</option>
+          <option value="pyramid">Čtyřboký jehlan</option>
+          <option value="irregularPrism">Nepravidelný čtyřboký hranol</option>
+        </select>
+      </section>
+
+      <section class="vpp-group">
+        <div class="vpp-label">Školní pohled</div>
+        <div class="fixed-view-grid" aria-label="Čtyři školní pohledy">
+          <button type="button" data-fixed-view="rightTop">Pravý nadhled</button>
+          <button type="button" data-fixed-view="leftTop">Levý nadhled</button>
+          <button type="button" data-fixed-view="leftBottom">Levý podhled</button>
+          <button type="button" data-fixed-view="rightBottom">Pravý podhled</button>
+        </div>
+      </section>
+
+      <section class="vpp-group" id="lessonPanel">
+        <div class="vpp-label">Postup pro žáky</div>
+        <div class="vpp-row">
+          <button type="button" id="recordBtn">● Nahrávat postup</button>
+          <button type="button" id="copyLessonBtn" disabled>🔗 Kopírovat odkaz</button>
+        </div>
+        <div id="recordCount" class="record-count">Kroky: 0</div>
+        <div id="lessonLinkWrap" style="margin-top:8px" hidden>
+          <input id="lessonLinkInput" type="text" readonly aria-label="Odkaz na postup"
+            style="width:100%;min-height:38px;padding:7px 9px;border:1px solid var(--border);border-radius:8px;background:var(--card);color:var(--text);font-size:12px">
+        </div>
+      </section>
+
+      <section class="vpp-group">
+        <div class="vpp-label">Pravoúhlý pohled rovinou</div>
+        <div class="vpp-row">
+          <input id="orthoPlaneInput" type="text" placeholder="např. A B E nebo A, P1, F" aria-label="Tři body roviny" style="flex:1 1 190px;min-height:40px;padding:8px 10px;border:1px solid var(--border);border-radius:10px;background:#fff;color:var(--text)">
+          <button type="button" id="showOrthoPlaneBtn">Zobrazit</button>
+          <button type="button" id="clearOrthoPlaneBtn">Skrýt</button>
+        </div>
+        <div class="top-inline-help">Stačí 3 body roviny. Můžeš použít vrcholy tělesa i body P1, P2, …</div>
+      </section>
+    </div>
+
     <div class="vpp-layout">
-      <div class="vpp-stage">
+      <div class="vpp-stage-stack">
+      <div class="vpp-stage vpp-stage-main">
         <div id="lessonPlayer" class="lesson-player lesson-player-top" hidden>
           <button type="button" id="lessonPrev">← Předchozí</button>
           <span id="lessonCounter" class="lesson-counter">1 / 1</span>
@@ -435,27 +585,26 @@
         <div id="status" class="vpp-status" aria-live="polite">Vyber těleso nebo rýsovací nástroj.</div>
       </div>
 
-      <div class="vpp-side">
-        <section class="vpp-group">
-          <div class="vpp-label">Těleso</div>
-          <select id="shape" aria-label="Volba tělesa">
-            <option value="cube">Krychle</option>
-            <option value="cuboid">Kvádr</option>
-            <option value="pyramid">Čtyřboký jehlan</option>
-            <option value="irregularPrism">Nepravidelný čtyřboký hranol</option>
-          </select>
-        </section>
-
-        <section class="vpp-group">
-          <div class="vpp-label">Školní pohled</div>
-          <div class="fixed-view-grid" aria-label="Čtyři školní pohledy">
-            <button type="button" data-fixed-view="rightTop">Pravý nadhled</button>
-            <button type="button" data-fixed-view="leftTop">Levý nadhled</button>
-            <button type="button" data-fixed-view="leftBottom">Levý podhled</button>
-            <button type="button" data-fixed-view="rightBottom">Pravý podhled</button>
+      <div class="vpp-stage vpp-stage-ortho">
+        <div class="stage-head">
+          <span>Pravoúhlý pohled rovinou <strong id="orthoPlaneCaption">—</strong></span>
+          <div class="stage-head-right">
+            <small id="orthoModeInfo">Zobrazuje se rovina a část tělesa za ní</small>
+            <button type="button" id="orthoModeBtn">Jen rovina</button>
           </div>
-        </section>
+        </div>
+        <svg id="ortho-svg" viewBox="0 0 720 360" role="img" aria-label="Pravoúhlý pohled rovinou">
+          <g id="ortho-object"></g>
+          <g id="ortho-section"></g>
+          <g id="ortho-drawings"></g>
+          <g id="ortho-points"></g>
+          <g id="ortho-labels"></g>
+          <g id="ortho-overlay"></g>
+        </svg>
+      </div>
+      </div>
 
+      <div class="vpp-side">
         <section class="vpp-group">
           <div class="vpp-label">Rýsování</div>
           <div class="tool-grid">
@@ -490,19 +639,6 @@
 
           <div class="vpp-row" style="margin-top:8px">
             <button type="button" id="clear">Smazat konstrukci</button>
-          </div>
-        </section>
-
-        <section class="vpp-group" id="lessonPanel">
-          <div class="vpp-label">Postup pro žáky</div>
-          <div class="vpp-row">
-            <button type="button" id="recordBtn">● Nahrávat postup</button>
-            <button type="button" id="copyLessonBtn" disabled>🔗 Kopírovat odkaz</button>
-          </div>
-          <div id="recordCount" class="record-count">Kroky: 0</div>
-          <div id="lessonLinkWrap" style="margin-top:8px" hidden>
-            <input id="lessonLinkInput" type="text" readonly aria-label="Odkaz na postup"
-              style="width:100%;min-height:38px;padding:7px 9px;border:1px solid var(--border);border-radius:8px;background:var(--card);color:var(--text);font-size:12px">
           </div>
         </section>
 
@@ -572,6 +708,19 @@
     const lessonPrev=root.querySelector('#lessonPrev');
     const lessonNext=root.querySelector('#lessonNext');
     const lessonCounter=root.querySelector('#lessonCounter');
+    const orthoPlaneInput=root.querySelector('#orthoPlaneInput');
+    const showOrthoPlaneBtn=root.querySelector('#showOrthoPlaneBtn');
+    const clearOrthoPlaneBtn=root.querySelector('#clearOrthoPlaneBtn');
+    const orthoSvg=root.querySelector('#ortho-svg');
+    const orthoPlaneCaption=root.querySelector('#orthoPlaneCaption');
+    const gOrthoObj=root.querySelector('#ortho-object');
+    const gOrthoSection=root.querySelector('#ortho-section');
+    const gOrthoDraw=root.querySelector('#ortho-drawings');
+    const gOrthoPts=root.querySelector('#ortho-points');
+    const gOrthoLab=root.querySelector('#ortho-labels');
+    const gOrthoOver=root.querySelector('#ortho-overlay');
+    const orthoModeBtn=root.querySelector('#orthoModeBtn');
+    const orthoModeInfo=root.querySelector('#orthoModeInfo');
 
     const SHOW_LABELS=true;
     const DASH_HIDDEN_EDGES=true;
@@ -598,6 +747,8 @@
       currentColor:'#7c3aed',
       selectedDrawings:[],
       activeFixedView:'rightTop',
+      orthoPlaneSpec:'',
+      orthoShowBehind:true,
       sectionMode:false,
       sectionHighlight:null,
       pending:[],
@@ -927,6 +1078,397 @@
         return {x:q.x,y:q.y};
       }
       return {x:Number(p?.x)||0,y:Number(p?.y)||0};
+    }
+
+    function planeFromThreePoints(a,b,c){
+      const ab=sub(b,a), ac=sub(c,a);
+      const n=normalize3(cross(ab,ac));
+      if(!n) return null;
+
+      // Školní orientace pomocného pravoúhlého pohledu:
+      // horizontála je průnik roviny s vodorovnou rovinou modelu,
+      // svislý směr vychází z modelové osy z.
+      const vertical=[0,0,1];
+      let u=normalize3(cross(vertical,n));
+      let v=null;
+
+      if(u){
+        v=normalize3(cross(n,u));
+      }else{
+        // Vodorovná rovina: svislice je k ní kolmá, proto zvolíme
+        // stabilní vodorovnou orientaci podle první použitelné hrany.
+        const candidates=[ab,ac,[1,0,0],[0,1,0]];
+        for(const cand of candidates){
+          const proj=sub(cand,scale3(n,dot(cand,n)));
+          u=normalize3(proj);
+          if(u) break;
+        }
+        if(!u) return null;
+        v=normalize3(cross(n,u));
+      }
+
+      if(!v) return null;
+
+      // Kladná modelová svislice má na obrazovce směřovat nahoru.
+      if(dot(v,vertical)<0){
+        u=scale3(u,-1);
+        v=scale3(v,-1);
+      }
+
+      return {point:[...a],normal:n,u,v};
+    }
+
+    function namedPointMap(){
+      const map=new Map();
+      shapes[state.shape].labels.forEach((lab,i)=>map.set(String(lab).toUpperCase(),{name:String(lab),local:[...shapes[state.shape].verts[i]],kind:'vertex',index:i}));
+      state.freePoints.forEach((p,i)=>{
+        const q=pointLocal(p);
+        if(q) map.set(('P'+(i+1)).toUpperCase(),{name:'P'+(i+1),local:q,kind:'free',index:i});
+      });
+      return map;
+    }
+
+    function parsePlaneSpec(raw){
+      const text=(raw||'').trim();
+      if(!text) return {error:'Zadej tři body roviny, například A B E nebo A, P1, F.'};
+      let tokens=[];
+      if(/^[A-Za-z]{3}$/.test(text)) tokens=text.toUpperCase().split('');
+      else tokens=(text.toUpperCase().match(/P\d+|[A-Z]/g)||[]);
+      if(tokens.length===1 && /^[A-Z]{3}$/.test(tokens[0])) tokens=tokens[0].split('');
+      if(tokens.length!==3) return {error:'Zadej právě 3 body roviny, například A B E nebo A, P1, F.'};
+      if(new Set(tokens).size!==3) return {error:'Body roviny musí být tři různé.'};
+      const map=namedPointMap();
+      const entries=[];
+      for(const token of tokens){
+        const item=map.get(token);
+        if(!item) return {error:'Bod '+token+' teď neexistuje.'};
+        entries.push(item);
+      }
+      const plane=planeFromThreePoints(entries[0].local,entries[1].local,entries[2].local);
+      if(!plane) return {error:'Tyto tři body neurčují rovinu.'};
+      plane.tokens=tokens;
+      plane.entries=entries;
+      return plane;
+    }
+
+    function orthoProjectLocal(local,plane){
+      const rel=sub(local,plane.point);
+      return {x:dot(rel,plane.u),y:dot(rel,plane.v),depth:dot(rel,plane.normal)};
+    }
+
+
+    function signedDistanceToOrthoPlane(local,plane){
+      return dot(plane.normal,sub(local,plane.point));
+    }
+
+    function orthoBackSign(plane){
+      // Zvolíme tu stranu roviny, která je v aktuálním hlavním pohledu
+      // dál od pozorovatele. Tím vznikne chování typu „rovina + to za ní“.
+      const base=worldToView(plane.point)[1];
+      const plus=worldToView(add3(plane.point,plane.normal))[1];
+      return plus>=base ? 1 : -1;
+    }
+
+    function orthoHalfspaceValue(local,plane){
+      return orthoBackSign(plane)*signedDistanceToOrthoPlane(local,plane);
+    }
+
+    function orthoPointOnPlane(local,plane){
+      return Math.abs(signedDistanceToOrthoPlane(local,plane))<=1e-7;
+    }
+
+    function orthoKeepsPoint(local,plane){
+      return state.orthoShowBehind ? orthoHalfspaceValue(local,plane)>=-1e-7 : orthoPointOnPlane(local,plane);
+    }
+
+    function clipSegmentToOrthoHalfspace(a,b,plane){
+      const sa=orthoHalfspaceValue(a,plane);
+      const sb=orthoHalfspaceValue(b,plane);
+      const eps=1e-7;
+      const ka=sa>=-eps, kb=sb>=-eps;
+      if(ka&&kb) return [a,b];
+      if(!ka&&!kb) return null;
+      const t=sa/(sa-sb);
+      const q=add3(a,scale3(sub(b,a),t));
+      return ka ? [a,q] : [q,b];
+    }
+
+    function clipPolygonToOrthoHalfspace(points,plane){
+      if(!Array.isArray(points)||!points.length) return [];
+      const out=[];
+      const eps=1e-7;
+      for(let i=0;i<points.length;i++){
+        const a=points[i], b=points[(i+1)%points.length];
+        const sa=orthoHalfspaceValue(a,plane);
+        const sb=orthoHalfspaceValue(b,plane);
+        const ka=sa>=-eps, kb=sb>=-eps;
+        if(ka) out.push([...a]);
+        if(ka!==kb){
+          const t=sa/(sa-sb);
+          out.push(add3(a,scale3(sub(b,a),t)));
+        }
+      }
+      return out;
+    }
+
+    function clippedInfiniteLineForOrtho(a,b,plane){
+      const dir=sub(b,a);
+      const sa=orthoHalfspaceValue(a,plane);
+      const sb=orthoHalfspaceValue(b,plane);
+      const slope=sb-sa;
+      const eps=1e-9;
+
+      if(Math.abs(slope)<eps){
+        return sa>=-1e-7 ? {kind:'line',a,b} : null;
+      }
+
+      const t0=-sa/slope;
+      const origin=add3(a,scale3(dir,t0));
+      // sa+t*slope >= 0. Od průsečíku tedy pokračujeme podle znaménka slope.
+      return {kind:'ray',origin,dir:slope>0?dir:scale3(dir,-1)};
+    }
+
+    function lineToRectGeneric(a,b,w,h){
+      const dx=b.x-a.x, dy=b.y-a.y;
+      if(Math.hypot(dx,dy)<1e-9) return null;
+      const ts=[];
+      if(Math.abs(dx)>1e-9) ts.push((0-a.x)/dx,(w-a.x)/dx);
+      if(Math.abs(dy)>1e-9) ts.push((0-a.y)/dy,(h-a.y)/dy);
+      const pts=ts.map(t=>({x:a.x+t*dx,y:a.y+t*dy})).filter(p=>p.x>=-1&&p.x<=w+1&&p.y>=-1&&p.y<=h+1);
+      if(pts.length<2) return null;
+      let best=[pts[0],pts[1]], bestD=-1;
+      for(let i=0;i<pts.length;i++) for(let j=i+1;j<pts.length;j++){
+        const d=(pts[i].x-pts[j].x)**2+(pts[i].y-pts[j].y)**2;
+        if(d>bestD){ bestD=d; best=[pts[i],pts[j]]; }
+      }
+      return best;
+    }
+
+    function orthoViewportFromPlane(plane){
+      const samples=[];
+      const add=p=>{ if(p) samples.push(orthoProjectLocal(p,plane)); };
+
+      // Pro měřítko bereme jen to, co se skutečně bude zobrazovat.
+      for(const [ia,ib] of shapes[state.shape].edges){
+        const a=shapes[state.shape].verts[ia], b=shapes[state.shape].verts[ib];
+        if(state.orthoShowBehind){
+          const clipped=clipSegmentToOrthoHalfspace(a,b,plane);
+          if(clipped){ add(clipped[0]); add(clipped[1]); }
+        }else if(orthoPointOnPlane(a,plane) && orthoPointOnPlane(b,plane)){
+          add(a); add(b);
+        }
+      }
+      state.freePoints.forEach(p=>{ const q=pointLocal(p); if(q&&orthoKeepsPoint(q,plane)) add(q); });
+      state.drawings.forEach(d=>{
+        if(d.hidden) return;
+        const a=pointLocal(d.a), b=pointLocal(d.b);
+        if(!a||!b) return;
+        if(d.type==='segment'){
+          if(state.orthoShowBehind){
+            const clipped=clipSegmentToOrthoHalfspace(a,b,plane);
+            if(clipped){ add(clipped[0]);add(clipped[1]); }
+          }else if(orthoPointOnPlane(a,plane) && orthoPointOnPlane(b,plane)){
+            add(a); add(b);
+          }
+        }else{
+          if(state.orthoShowBehind){
+            const clipped=clippedInfiniteLineForOrtho(a,b,plane);
+            if(clipped?.kind==='line'){ add(a);add(b); }
+            else if(clipped?.kind==='ray'){ add(clipped.origin); add(add3(clipped.origin,clipped.dir)); }
+          }else if(orthoPointOnPlane(a,plane) && orthoPointOnPlane(b,plane)){
+            add(a); add(b);
+          }
+        }
+      });
+      if(state.sectionHighlight?.points){
+        if(state.orthoShowBehind){
+          clipPolygonToOrthoHalfspace(state.sectionHighlight.points,plane).forEach(add);
+        }else if(state.sectionHighlight.points.every(p=>orthoPointOnPlane(p,plane))){
+          state.sectionHighlight.points.forEach(add);
+        }
+      }
+      plane.entries.forEach(e=>add(e.local));
+
+      let minX=Math.min(...samples.map(p=>p.x)), maxX=Math.max(...samples.map(p=>p.x));
+      let minY=Math.min(...samples.map(p=>p.y)), maxY=Math.max(...samples.map(p=>p.y));
+      if(!Number.isFinite(minX)||!Number.isFinite(minY)){ minX=-1;maxX=1;minY=-1;maxY=1; }
+      if(maxX-minX<1e-6){ minX-=1; maxX+=1; }
+      if(maxY-minY<1e-6){ minY-=1; maxY+=1; }
+      const W=720,H=360,pad=34;
+      const scale=Math.min((W-2*pad)/(maxX-minX),(H-2*pad)/(maxY-minY));
+      return {minX,maxX,minY,maxY,midX:(minX+maxX)/2,midY:(minY+maxY)/2,scale,W,H};
+    }
+
+    function orthoToScreen(p,view){
+      return {x:view.W/2+(p.x-view.midX)*view.scale,y:view.H/2-(p.y-view.midY)*view.scale,depth:p.depth};
+    }
+
+    function renderOrthoMessage(message){
+      gOrthoObj.replaceChildren();
+      gOrthoSection.replaceChildren();
+      gOrthoDraw.replaceChildren();
+      gOrthoPts.replaceChildren();
+      gOrthoLab.replaceChildren();
+      gOrthoOver.replaceChildren();
+      orthoPlaneCaption.textContent='—';
+      orthoModeInfo.textContent=state.orthoShowBehind
+        ? 'Zobrazuje se rovina a část tělesa za ní'
+        : 'Zobrazuje se jen to, co leží v rovině';
+      orthoModeBtn.textContent=state.orthoShowBehind ? 'Jen rovina' : 'Rovina + za ní';
+      const t=el('text',{x:360,y:180,'text-anchor':'middle','dominant-baseline':'middle',class:'ortho-hint'});
+      t.textContent=message;
+      gOrthoOver.append(t);
+    }
+
+    function renderOrthoView(){
+      const spec=(state.orthoPlaneSpec||'').trim();
+      if(!spec){
+        renderOrthoMessage('Zadej tři body roviny, například A B E nebo A, P1, F.');
+        return;
+      }
+      const parsed=parsePlaneSpec(spec);
+      if(parsed.error){
+        renderOrthoMessage(parsed.error);
+        return;
+      }
+
+      gOrthoObj.replaceChildren();
+      gOrthoSection.replaceChildren();
+      gOrthoDraw.replaceChildren();
+      gOrthoPts.replaceChildren();
+      gOrthoLab.replaceChildren();
+      gOrthoOver.replaceChildren();
+      orthoPlaneCaption.textContent=parsed.tokens.join(' ');
+      orthoModeInfo.textContent=state.orthoShowBehind
+        ? 'Zobrazuje se rovina a část tělesa za ní'
+        : 'Zobrazuje se jen to, co leží v rovině';
+      orthoModeBtn.textContent=state.orthoShowBehind ? 'Jen rovina' : 'Rovina + za ní';
+
+      const view=orthoViewportFromPlane(parsed);
+
+      // Těleso
+      for(const [ia,ib] of shapes[state.shape].edges){
+        const aLocal=shapes[state.shape].verts[ia];
+        const bLocal=shapes[state.shape].verts[ib];
+        if(state.orthoShowBehind){
+          const clipped=clipSegmentToOrthoHalfspace(aLocal,bLocal,parsed);
+          if(!clipped) continue;
+          const a=orthoToScreen(orthoProjectLocal(clipped[0],parsed),view);
+          const b=orthoToScreen(orthoProjectLocal(clipped[1],parsed),view);
+          if(Math.hypot(a.x-b.x,a.y-b.y)<0.8) continue;
+          gOrthoObj.append(el('line',{x1:a.x,y1:a.y,x2:b.x,y2:b.y,class:'ortho-edge'}));
+        }else if(orthoPointOnPlane(aLocal,parsed) && orthoPointOnPlane(bLocal,parsed)){
+          const a=orthoToScreen(orthoProjectLocal(aLocal,parsed),view);
+          const b=orthoToScreen(orthoProjectLocal(bLocal,parsed),view);
+          if(Math.hypot(a.x-b.x,a.y-b.y)<0.8) continue;
+          gOrthoObj.append(el('line',{x1:a.x,y1:a.y,x2:b.x,y2:b.y,class:'ortho-edge'}));
+        }
+      }
+
+      // Zvýrazněný řez
+      if(state.sectionHighlight?.points?.length>=3){
+        let sectionPts=[];
+        if(state.orthoShowBehind){
+          sectionPts=clipPolygonToOrthoHalfspace(state.sectionHighlight.points,parsed);
+        }else if(state.sectionHighlight.points.every(p=>orthoPointOnPlane(p,parsed))){
+          sectionPts=state.sectionHighlight.points.map(p=>[...p]);
+        }
+        if(sectionPts.length>=3){
+          const pts=sectionPts.map(p=>orthoToScreen(orthoProjectLocal(p,parsed),view));
+          const poly=pts.map(q=>`${q.x},${q.y}`).join(' ');
+          gOrthoSection.append(el('polygon',{points:poly,class:'section-fill',style:`fill:${state.sectionHighlight.color};stroke:${state.sectionHighlight.color}`}));
+        }
+      }
+
+      // Konstrukce: úsečky ořízneme, přímky změníme na celou přímku nebo polopřímku.
+      for(let i=0;i<state.drawings.length;i++){
+        const d=state.drawings[i];
+        if(d.hidden) continue;
+        const aLocal=pointLocal(d.a), bLocal=pointLocal(d.b);
+        if(!aLocal||!bLocal) continue;
+        const cls='ortho-drawing'+(state.selectedDrawings.includes(i)?' selected':'');
+        const style=`stroke:${d.color||state.currentColor}`;
+
+        if(d.type==='segment'){
+          if(state.orthoShowBehind){
+            const clipped=clipSegmentToOrthoHalfspace(aLocal,bLocal,parsed);
+            if(!clipped) continue;
+            const a=orthoToScreen(orthoProjectLocal(clipped[0],parsed),view);
+            const b=orthoToScreen(orthoProjectLocal(clipped[1],parsed),view);
+            if(Math.hypot(a.x-b.x,a.y-b.y)<0.8) continue;
+            gOrthoDraw.append(el('line',{x1:a.x,y1:a.y,x2:b.x,y2:b.y,class:cls,style}));
+          }else{
+            if(!(orthoPointOnPlane(aLocal,parsed) && orthoPointOnPlane(bLocal,parsed))) continue;
+            const a=orthoToScreen(orthoProjectLocal(aLocal,parsed),view);
+            const b=orthoToScreen(orthoProjectLocal(bLocal,parsed),view);
+            if(Math.hypot(a.x-b.x,a.y-b.y)<0.8) continue;
+            gOrthoDraw.append(el('line',{x1:a.x,y1:a.y,x2:b.x,y2:b.y,class:cls,style}));
+          }
+          continue;
+        }
+
+        if(state.orthoShowBehind){
+          const clipped=clippedInfiniteLineForOrtho(aLocal,bLocal,parsed);
+          if(!clipped) continue;
+          if(clipped.kind==='line'){
+            const a=orthoToScreen(orthoProjectLocal(aLocal,parsed),view);
+            const b=orthoToScreen(orthoProjectLocal(bLocal,parsed),view);
+            const seg=lineToRectGeneric(a,b,720,360);
+            if(seg) gOrthoDraw.append(el('line',{x1:seg[0].x,y1:seg[0].y,x2:seg[1].x,y2:seg[1].y,class:cls,style}));
+          }else{
+            const p0=orthoToScreen(orthoProjectLocal(clipped.origin,parsed),view);
+            const p1=orthoToScreen(orthoProjectLocal(add3(clipped.origin,clipped.dir),parsed),view);
+            const dx=p1.x-p0.x,dy=p1.y-p0.y,dd=dx*dx+dy*dy;
+            if(dd<1e-9) continue;
+            const full=lineToRectGeneric(p0,p1,720,360);
+            if(!full) continue;
+            const t0=((full[0].x-p0.x)*dx+(full[0].y-p0.y)*dy)/dd;
+            const t1=((full[1].x-p0.x)*dx+(full[1].y-p0.y)*dy)/dd;
+            const candidates=[[t0,full[0]],[t1,full[1]]].filter(([t])=>t>=-1e-9).sort((a,b)=>b[0]-a[0]);
+            if(candidates.length){
+              const end=candidates[0][1];
+              gOrthoDraw.append(el('line',{x1:p0.x,y1:p0.y,x2:end.x,y2:end.y,class:cls,style}));
+            }
+          }
+        }else{
+          if(!(orthoPointOnPlane(aLocal,parsed) && orthoPointOnPlane(bLocal,parsed))) continue;
+          const a=orthoToScreen(orthoProjectLocal(aLocal,parsed),view);
+          const b=orthoToScreen(orthoProjectLocal(bLocal,parsed),view);
+          const seg=lineToRectGeneric(a,b,720,360);
+          if(seg) gOrthoDraw.append(el('line',{x1:seg[0].x,y1:seg[0].y,x2:seg[1].x,y2:seg[1].y,class:cls,style}));
+        }
+      }
+
+      // Vrcholy a body: také jen rovina + zadní poloprostor.
+      shapes[state.shape].verts.forEach((local,i)=>{
+        if(!orthoKeepsPoint(local,parsed)) return;
+        const p=orthoToScreen(orthoProjectLocal(local,parsed),view);
+        const lab=shapes[state.shape].labels[i];
+        const t=el('text',{x:p.x+8,y:p.y-8,class:'ortho-label'});
+        t.textContent=lab;
+        gOrthoLab.append(t);
+      });
+
+      state.freePoints.forEach((p,i)=>{
+        const local=pointLocal(p);
+        if(!local||!orthoKeepsPoint(local,parsed)) return;
+        const q=orthoToScreen(orthoProjectLocal(local,parsed),view);
+        if(pointLiesOnExistingGeometry(p)){
+          gOrthoPts.append(el('line',{x1:q.x-4.2,y1:q.y-4.2,x2:q.x+4.2,y2:q.y+4.2,class:'ortho-cross',style:`stroke:${p.color||state.currentColor}`}));
+          gOrthoPts.append(el('line',{x1:q.x-4.2,y1:q.y+4.2,x2:q.x+4.2,y2:q.y-4.2,class:'ortho-cross',style:`stroke:${p.color||state.currentColor}`}));
+        }else{
+          gOrthoPts.append(el('circle',{cx:q.x,cy:q.y,r:4.3,class:'ortho-point',style:`stroke:${p.color||state.currentColor}`}));
+        }
+        const t=el('text',{x:q.x+7,y:q.y-7,class:'ortho-label'});
+        t.textContent='P'+(i+1);
+        gOrthoLab.append(t);
+      });
+
+      // Tři zadané body roviny jsou vždy přesně v řezu, proto zůstanou zvýrazněné.
+      for(const e of parsed.entries){
+        const q=orthoToScreen(orthoProjectLocal(e.local,parsed),view);
+        gOrthoOver.append(el('circle',{cx:q.x,cy:q.y,r:8,class:'ortho-plane-pick'}));
+      }
     }
 
     function drawingGeometry3D(index){
@@ -1676,6 +2218,7 @@
       renderSection();
       renderDrawings();
       renderOverlay();
+      renderOrthoView();
     }
 
     function coords(evt){
@@ -2256,6 +2799,44 @@
     fullscreenBtn.addEventListener('click',toggleFullscreen);
     document.addEventListener('fullscreenchange',updateFullscreenButton);
 
+    function applyOrthoPlaneSpec(){
+      const raw=(orthoPlaneInput.value||'').trim();
+      if(!raw){
+        state.orthoPlaneSpec='';
+        render();
+        status.textContent='Pravoúhlý pohled rovinou skryt.';
+        return;
+      }
+      const parsed=parsePlaneSpec(raw);
+      if(parsed.error){
+        state.orthoPlaneSpec=raw;
+        render();
+        status.textContent=parsed.error;
+        return;
+      }
+      state.orthoPlaneSpec=parsed.tokens.join(' ');
+      orthoPlaneInput.value=state.orthoPlaneSpec;
+      render();
+      status.textContent='Pravoúhlý pohled rovinou '+state.orthoPlaneSpec+' zobrazen.';
+    }
+
+    orthoModeBtn.addEventListener('click',()=>{
+      state.orthoShowBehind=!state.orthoShowBehind;
+      render();
+      status.textContent=state.orthoShowBehind
+        ? 'Pravoúhlý pohled zobrazuje rovinu a část tělesa za ní.'
+        : 'Pravoúhlý pohled zobrazuje jen to, co leží v rovině.';
+    });
+
+    showOrthoPlaneBtn.addEventListener('click',applyOrthoPlaneSpec);
+    clearOrthoPlaneBtn.addEventListener('click',()=>{
+      state.orthoPlaneSpec='';
+      orthoPlaneInput.value='';
+      render();
+      status.textContent='Pravoúhlý pohled rovinou skryt.';
+    });
+    orthoPlaneInput.addEventListener('keydown',e=>{ if(e.key==='Enter'){ e.preventDefault(); applyOrthoPlaneSpec(); }});
+
     saveImageBtn.addEventListener('click',saveCanvasAsJpg);
 
     root.querySelector('#undo').addEventListener('click',()=>{
@@ -2415,7 +2996,7 @@
     function deepCloneLesson(v){ return v==null?v:JSON.parse(JSON.stringify(v)); }
     function roundLesson(v){ return Math.round((Number(v)||0)*100000)/100000; }
     function makeLessonSnapshot(){
-      return {sh:state.shape,crx:roundLesson(state.cameraRx),cry:roundLesson(state.cameraRy),crz:roundLesson(state.cameraRz),orx:roundLesson(state.objectRx),ory:roundLesson(state.objectRy),orz:roundLesson(state.objectRz),dx:roundLesson(state.depthX),dy:roundLesson(state.depthY),z:roundLesson(state.zoom),fv:state.activeFixedView||null,d:deepCloneLesson(state.drawings),p:deepCloneLesson(state.freePoints),s:deepCloneLesson(state.sectionHighlight)};
+      return {sh:state.shape,crx:roundLesson(state.cameraRx),cry:roundLesson(state.cameraRy),crz:roundLesson(state.cameraRz),orx:roundLesson(state.objectRx),ory:roundLesson(state.objectRy),orz:roundLesson(state.objectRz),dx:roundLesson(state.depthX),dy:roundLesson(state.depthY),z:roundLesson(state.zoom),fv:state.activeFixedView||null,d:deepCloneLesson(state.drawings),p:deepCloneLesson(state.freePoints),s:deepCloneLesson(state.sectionHighlight),op:state.orthoPlaneSpec||'',ob:state.orthoShowBehind?1:0};
     }
     function updateRecordUi(){
       recordCount.textContent='Kroky: '+lessonState.steps.length;
@@ -2535,7 +3116,9 @@
         lessonIndexOr(LESSON_VIEWS,s.fv,0),
         (s.d||[]).map(packLessonDrawing),
         (s.p||[]).map(packLessonPoint),
-        packLessonSection(s.s)
+        packLessonSection(s.s),
+        s.op||'',
+        s.ob?1:0
       ];
     }
     function unpackLessonSnapshot(a){
@@ -2547,7 +3130,9 @@
         fv:LESSON_VIEWS[a[10]]||null,
         d:(a[11]||[]).map(unpackLessonDrawing),
         p:(a[12]||[]).map(unpackLessonPoint),
-        s:unpackLessonSection(a[13])
+        s:unpackLessonSection(a[13]),
+        op:a[14]||'',
+        ob:a[15]?1:0
       };
     }
 
@@ -2587,6 +3172,8 @@
         const dp=packArrayDelta(prev[12],cur[12]);
         if(dp){mask|=(1<<12);vals.push(dp);}
         if(!packedEqual(prev[13],cur[13])){mask|=(1<<13);vals.push(cur[13]);}
+        if(!packedEqual(prev[14],cur[14])){mask|=(1<<14);vals.push(cur[14]);}
+        if(!packedEqual(prev[15],cur[15])){mask|=(1<<15);vals.push(cur[15]);}
         diffs.push([mask,...vals]);
         prev=cur;
       }
@@ -2605,6 +3192,8 @@
         if(mask&(1<<11)) cur[11]=applyArrayDelta(cur[11],diff[j++]);
         if(mask&(1<<12)) cur[12]=applyArrayDelta(cur[12],diff[j++]);
         if(mask&(1<<13)) cur[13]=diff[j++];
+        if(mask&(1<<14)) cur[14]=diff[j++];
+        if(mask&(1<<15)) cur[15]=diff[j++];
         out.push(unpackLessonSnapshot(cur));
       }
       return out;
@@ -2660,7 +3249,7 @@
       }
     }
     function applyLessonSnapshot(s){
-      stopAutoRotation();state.shape=s.sh||'cube';shapeSel.value=state.shape;state.cameraRx=Number(s.crx)||0;state.cameraRy=Number(s.cry)||0;state.cameraRz=Number(s.crz)||0;state.objectRx=Number(s.orx)||0;state.objectRy=Number(s.ory)||0;state.objectRz=Number(s.orz)||0;state.depthX=Number.isFinite(Number(s.dx))?Number(s.dx):DEPTH;state.depthY=Number.isFinite(Number(s.dy))?Number(s.dy):-DEPTH;state.zoom=Number.isFinite(Number(s.z))?Number(s.z):1;state.activeFixedView=s.fv||null;state.drawings=deepCloneLesson(s.d||[]);state.freePoints=deepCloneLesson(s.p||[]);state.sectionHighlight=deepCloneLesson(s.s||null);state.pending=[];state.selectedDrawings=[];state.sectionMode=false;state.hover=null;state.hoverDirection=null;state.history=[];root.querySelectorAll('[data-fixed-view]').forEach(b=>b.dataset.active=String(b.dataset.fixedView===state.activeFixedView));updateSelectionUi();render();
+      stopAutoRotation();state.shape=s.sh||'cube';shapeSel.value=state.shape;state.cameraRx=Number(s.crx)||0;state.cameraRy=Number(s.cry)||0;state.cameraRz=Number(s.crz)||0;state.objectRx=Number(s.orx)||0;state.objectRy=Number(s.ory)||0;state.objectRz=Number(s.orz)||0;state.depthX=Number.isFinite(Number(s.dx))?Number(s.dx):DEPTH;state.depthY=Number.isFinite(Number(s.dy))?Number(s.dy):-DEPTH;state.zoom=Number.isFinite(Number(s.z))?Number(s.z):1;state.activeFixedView=s.fv||null;state.drawings=deepCloneLesson(s.d||[]);state.freePoints=deepCloneLesson(s.p||[]);state.sectionHighlight=deepCloneLesson(s.s||null);state.orthoPlaneSpec=s.op||'';state.orthoShowBehind=!(s.ob===0);orthoPlaneInput.value=state.orthoPlaneSpec;state.pending=[];state.selectedDrawings=[];state.sectionMode=false;state.hover=null;state.hoverDirection=null;state.history=[];root.querySelectorAll('[data-fixed-view]').forEach(b=>b.dataset.active=String(b.dataset.fixedView===state.activeFixedView));updateSelectionUi();render();
     }
     function updateLessonPlayer(){ const n=lessonState.playbackSteps.length,i=lessonState.playbackIndex;lessonCounter.textContent=(i+1)+' / '+n;lessonPrev.disabled=i<=0;lessonNext.disabled=i>=n-1; }
     function showLessonStep(i){ if(!lessonState.playbackSteps.length)return;lessonState.playbackIndex=Math.max(0,Math.min(lessonState.playbackSteps.length-1,i));applyLessonSnapshot(lessonState.playbackSteps[lessonState.playbackIndex]);updateLessonPlayer();status.textContent='Postup: krok '+(lessonState.playbackIndex+1)+' z '+lessonState.playbackSteps.length+'.'; }
