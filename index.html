@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Prostorová geometrie – volné rovnoběžné promítání</title>
+  <title>Stereometrie</title>
   <style>
     :root{
       --bg:#f5f6f8;
@@ -29,10 +29,28 @@
       padding:10px 12px 12px;
     }
     .header{margin-bottom:8px}
+    .header-title-row{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:10px;
+      flex-wrap:wrap;
+    }
     .header h1{
       margin:0 0 2px;
       font-size:clamp(18px,2.2vw,28px);
       line-height:1.12;
+    }
+    #downloadHtmlBtn{
+      min-height:34px;
+      padding:6px 10px;
+      border:1px solid var(--border);
+      border-radius:9px;
+      background:var(--panel);
+      color:var(--text);
+      font-size:13px;
+      font-weight:600;
+      white-space:nowrap;
     }
     .header p{
       margin:0;
@@ -449,6 +467,71 @@
     .construction.selected{
       stroke-width:3.3;
     }
+    #vpp-svg[data-anaglyph="true"] #object-hidden,
+    #vpp-svg[data-anaglyph="true"] #section-fill,
+    #vpp-svg[data-anaglyph="true"] #object-visible,
+    #vpp-svg[data-anaglyph="true"] #drawings,
+    #vpp-svg[data-anaglyph="true"] #points,
+    #vpp-svg[data-anaglyph="true"] #labels{
+      opacity:0;
+      pointer-events:none;
+    }
+    .anaglyph-eye{
+      mix-blend-mode:multiply;
+    }
+    .anaglyph-line{
+      fill:none;
+      stroke-width:2.2;
+      stroke-linecap:round;
+      stroke-linejoin:round;
+      vector-effect:non-scaling-stroke;
+    }
+    .anaglyph-hidden{
+      stroke-dasharray:8 6;
+      opacity:.72;
+    }
+    .anaglyph-red{stroke:#ff0000}
+    .anaglyph-cyan{stroke:#00cfff}
+    .anaglyph-fill-red{
+      fill:#ff0000;
+      fill-opacity:.10;
+      stroke:#ff0000;
+      stroke-width:2;
+      vector-effect:non-scaling-stroke;
+    }
+    .anaglyph-fill-cyan{
+      fill:#00cfff;
+      fill-opacity:.10;
+      stroke:#00cfff;
+      stroke-width:2;
+      vector-effect:non-scaling-stroke;
+    }
+    .anaglyph-label{
+      fill:#111827;
+      font-size:15px;
+      font-weight:700;
+      paint-order:stroke;
+      stroke:#fff;
+      stroke-width:3px;
+      stroke-linejoin:round;
+      pointer-events:none;
+    }
+    .anaglyph-point-label{
+      fill:#111827;
+      font-size:14px;
+      font-weight:700;
+      paint-order:stroke;
+      stroke:#fff;
+      stroke-width:3px;
+      stroke-linejoin:round;
+      pointer-events:none;
+    }
+    #anaglyphBtn[data-active="true"]{
+      border-color:#ef4444;
+      background:linear-gradient(90deg,#fee2e2 0 48%,#cffafe 52% 100%);
+      color:#111827;
+      font-weight:700;
+    }
     .preview{
       stroke:var(--accent);
       stroke-width:1.8;
@@ -568,7 +651,10 @@
 <body>
   <main id="vpp-tool">
     <div class="header">
-      <h1>Prostorová geometrie</h1>
+      <div class="header-title-row">
+        <h1>Stereometrie</h1>
+        <button type="button" id="downloadHtmlBtn">⬇ Stáhnout HTML</button>
+      </div>
       <p>Krychle, kvádr, čtyřboký jehlan a nepravidelný čtyřboký hranol ve volném rovnoběžném promítání. Skryté hrany se automaticky kreslí čárkovaně.</p>
     </div>
 
@@ -633,6 +719,7 @@
           <g id="drawings"></g>
           <g id="points"></g>
           <g id="labels"></g>
+          <g id="anaglyph"></g>
           <g id="overlay"></g>
           <text x="16" y="500" class="axis-hint">Výchozí školní pohled: hloubkové hrany 45° · zkrácení 1/2</text>
         </svg>
@@ -643,6 +730,7 @@
         <div class="stage-actions">
           <button type="button" id="undo">↶ Zpět</button>
           <button type="button" id="saveImageBtn">Uložit obrázek</button>
+          <button type="button" id="anaglyphBtn" aria-pressed="false">🥽 3D brýle</button>
           <button type="button" id="fullscreenBtn">⛶ Celá obrazovka</button>
         </div>
         <div id="status" class="vpp-status" aria-live="polite">Vyber těleso nebo rýsovací nástroj.</div>
@@ -742,6 +830,7 @@
   <script>
   (()=> {
     const root=document.getElementById('vpp-tool');
+    const downloadHtmlBtn=document.getElementById('downloadHtmlBtn');
     const svg=root.querySelector('#vpp-svg');
     const mainStage=root.querySelector('.vpp-stage-main');
     const gGrid=root.querySelector('#grid');
@@ -751,6 +840,7 @@
     const gDraw=root.querySelector('#drawings');
     const gPts=root.querySelector('#points');
     const gLab=root.querySelector('#labels');
+    const gAnaglyph=root.querySelector('#anaglyph');
     const gOver=root.querySelector('#overlay');
 
     const status=root.querySelector('#status');
@@ -765,6 +855,7 @@
     const sectionBtn=root.querySelector('#sectionBtn');
     const clearSectionBtn=root.querySelector('#clearSectionBtn');
     const saveImageBtn=root.querySelector('#saveImageBtn');
+    const anaglyphBtn=root.querySelector('#anaglyphBtn');
     const fullscreenBtn=root.querySelector('#fullscreenBtn');
     const autoRotateBtn=root.querySelector('#autoRotateBtn');
     const rotationSpeedInput=root.querySelector('#rotationSpeed');
@@ -813,6 +904,7 @@
       depthX:DEPTH,
       depthY:-DEPTH,
       zoom:1,
+      anaglyph:false,
       tool:null,
       currentColor:'#7c3aed',
       selectedDrawings:[],
@@ -2218,8 +2310,9 @@
         const u=cuts[i],v=cuts[i+1];
         if(Math.abs(v-u)<1e-7) continue;
         const mid=(u+v)/2;
-        const p1=project(pointAt(u)), p2=project(pointAt(v));
-        parts.push({a:p1,b:p2,occluded:hiddenAt(mid)});
+        const localA=pointAt(u), localB=pointAt(v);
+        const p1=project(localA), p2=project(localB);
+        parts.push({a:p1,b:p2,localA,localB,occluded:hiddenAt(mid)});
       }
       return parts;
     }
@@ -2445,11 +2538,157 @@
       return true;
     }
 
+    function stereoFocusDepth(){
+      const verts=shapes[state.shape].verts;
+      if(!verts.length) return 0;
+      return verts.reduce((sum,v)=>sum+worldToView(v)[1],0)/verts.length;
+    }
+
+    function projectStereo(local,eye){
+      const base=project(local);
+      const depth=worldToView(local)[1];
+      const focus=stereoFocusDepth();
+
+      // Paralaxa se mění s hloubkou. Střed tělesa zůstává přibližně
+      // ve stejné poloze, takže 3D efekt neunáší celý obrázek do strany.
+      const separation=5.8*state.zoom;
+      return {
+        x:base.x + eye*(depth-focus)*separation,
+        y:base.y
+      };
+    }
+
+    function appendAnaglyphCross(group,q,eyeClass,size=4.3){
+      group.append(el('line',{
+        x1:q.x-size,y1:q.y-size,x2:q.x+size,y2:q.y+size,
+        class:`anaglyph-line ${eyeClass}`
+      }));
+      group.append(el('line',{
+        x1:q.x-size,y1:q.y+size,x2:q.x+size,y2:q.y-size,
+        class:`anaglyph-line ${eyeClass}`
+      }));
+    }
+
+    function renderAnaglyphEye(eye,colorClass){
+      const eyeGroup=el('g',{class:'anaglyph-eye'});
+      const data=shapes[state.shape];
+
+      // Hrany tělesa
+      for(const edge of data.edges){
+        const [ia,ib]=edge;
+        const a=projectStereo(data.verts[ia],eye);
+        const b=projectStereo(data.verts[ib],eye);
+        const hidden=!edgeIsVisible(edge) && DASH_HIDDEN_EDGES;
+        eyeGroup.append(el('line',{
+          x1:a.x,y1:a.y,x2:b.x,y2:b.y,
+          class:`anaglyph-line ${colorClass}${hidden?' anaglyph-hidden':''}`
+        }));
+      }
+
+      // Zvýrazněný řez
+      const sec=state.sectionHighlight;
+      if(sec?.points?.length>=3){
+        const pts=sec.points.map(p=>{
+          const q=projectStereo(p,eye);
+          return `${q.x},${q.y}`;
+        }).join(' ');
+        eyeGroup.append(el('polygon',{
+          points:pts,
+          class:colorClass==='anaglyph-red'?'anaglyph-fill-red':'anaglyph-fill-cyan'
+        }));
+      }
+
+      // Konstrukce včetně pouze skutečně skrytých částí
+      for(let i=0;i<state.drawings.length;i++){
+        const d=state.drawings[i];
+        if(d.hidden) continue;
+        for(const part of drawingVisibleParts(d)){
+          if(!part.localA || !part.localB) continue;
+          const a=projectStereo(part.localA,eye);
+          const b=projectStereo(part.localB,eye);
+          eyeGroup.append(el('line',{
+            x1:a.x,y1:a.y,x2:b.x,y2:b.y,
+            class:`anaglyph-line ${colorClass}${part.occluded?' anaglyph-hidden':''}`
+          }));
+        }
+      }
+
+      // Uživatelské body
+      state.freePoints.forEach((p,i)=>{
+        if(p.hidden || p.kind==='vertex') return;
+        const local=pointLocal(p);
+        if(!local) return;
+        const q=projectStereo(local,eye);
+        appendAnaglyphCross(eyeGroup,q,colorClass,4.2);
+      });
+
+      // Skutečné 3D průsečíky
+      for(const p of automaticIntersections()){
+        const local=pointLocal(p);
+        if(!local) continue;
+        appendAnaglyphCross(eyeGroup,projectStereo(local,eye),colorClass,4.0);
+      }
+
+      gAnaglyph.append(eyeGroup);
+    }
+
+    function renderAnaglyphLabels(){
+      const data=shapes[state.shape];
+      const pv=data.verts.map(v=>project(v));
+      const center=pv.reduce((acc,p)=>({
+        x:acc.x+p.x/pv.length,
+        y:acc.y+p.y/pv.length
+      }),{x:0,y:0});
+
+      pv.forEach((p,i)=>{
+        let dx=p.x-center.x,dy=p.y-center.y;
+        const L=Math.hypot(dx,dy)||1;
+        dx/=L;dy/=L;
+        const t=el('text',{
+          x:p.x+dx*18,
+          y:p.y+dy*18,
+          class:'anaglyph-label',
+          'text-anchor':dx<-.18?'end':dx>.18?'start':'middle',
+          'dominant-baseline':'middle'
+        });
+        t.textContent=data.labels[i];
+        gAnaglyph.append(t);
+      });
+
+      state.freePoints.forEach((p,i)=>{
+        if(p.hidden || p.kind==='vertex') return;
+        const local=pointLocal(p);
+        if(!local) return;
+        const q=project(local);
+        const t=el('text',{
+          x:q.x+7,y:q.y-7,class:'anaglyph-point-label'
+        });
+        t.textContent=pointDisplayName(p,i);
+        gAnaglyph.append(t);
+      });
+    }
+
+    function renderAnaglyph(){
+      gAnaglyph.replaceChildren();
+      svg.dataset.anaglyph=String(state.anaglyph);
+      anaglyphBtn.dataset.active=String(state.anaglyph);
+      anaglyphBtn.setAttribute('aria-pressed',String(state.anaglyph));
+      anaglyphBtn.textContent=state.anaglyph?'🥽 Normální pohled':'🥽 3D brýle';
+
+      if(!state.anaglyph) return;
+
+      // Levé oko: červený filtr, pravé oko: azurový filtr.
+      renderAnaglyphEye(-1,'anaglyph-red');
+      renderAnaglyphEye(1,'anaglyph-cyan');
+      renderAnaglyphLabels();
+    }
+
     function render(){
       renderGrid();
       renderObject();
       renderSection();
       renderDrawings();
+      renderAnaglyph();
       renderOverlay();
       renderOrthoView();
       positionPointRenameEditor();
@@ -3069,6 +3308,28 @@
         .vertex-label{font-size:15px;font-weight:700;fill:#1f2937;stroke:none}
         .section-fill{fill-opacity:.22;stroke-width:2.4;stroke-linejoin:round}
         .axis-hint{font-size:12px;fill:#6b7280}
+        #vpp-svg[data-anaglyph="true"] #object-hidden,
+        #vpp-svg[data-anaglyph="true"] #section-fill,
+        #vpp-svg[data-anaglyph="true"] #object-visible,
+        #vpp-svg[data-anaglyph="true"] #drawings,
+        #vpp-svg[data-anaglyph="true"] #points,
+        #vpp-svg[data-anaglyph="true"] #labels{opacity:0}
+        .anaglyph-eye{mix-blend-mode:multiply}
+        .anaglyph-line{fill:none;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round}
+        .anaglyph-hidden{stroke-dasharray:8 6;opacity:.72}
+        .anaglyph-red{stroke:#ff0000}
+        .anaglyph-cyan{stroke:#00cfff}
+        .anaglyph-fill-red{fill:#ff0000;fill-opacity:.10;stroke:#ff0000;stroke-width:2}
+        .anaglyph-fill-cyan{fill:#00cfff;fill-opacity:.10;stroke:#00cfff;stroke-width:2}
+        .anaglyph-label,.anaglyph-point-label{fill:#111827;font-weight:700;paint-order:stroke;stroke:#fff;stroke-width:3px}
+        .anaglyph-label{font-size:15px}
+        .anaglyph-point-label{font-size:14px}
+        svg[data-anaglyph="true"] #object-hidden,
+        svg[data-anaglyph="true"] #section-fill,
+        svg[data-anaglyph="true"] #object-visible,
+        svg[data-anaglyph="true"] #drawings,
+        svg[data-anaglyph="true"] #points,
+        svg[data-anaglyph="true"] #labels{opacity:0}
       `;
       clone.insertBefore(style,clone.firstChild);
 
@@ -3125,6 +3386,35 @@
       fullscreenBtn.textContent=active ? '⛶ Ukončit celou obrazovku' : '⛶ Celá obrazovka';
       fullscreenBtn.dataset.active=String(active);
     }
+
+    function downloadCurrentHtml(){
+      const clone=document.documentElement.cloneNode(true);
+
+      // Do stažené verze nechceme zachovat dočasné UI stavy.
+      const lessonInput=clone.querySelector('#lessonLinkInput');
+      if(lessonInput) lessonInput.value='';
+
+      const html='<!doctype html>\n'+clone.outerHTML;
+      const blob=new Blob([html],{type:'text/html;charset=utf-8'});
+      const url=URL.createObjectURL(blob);
+      const a=document.createElement('a');
+      a.href=url;
+      a.download='stereometrie.html';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(()=>URL.revokeObjectURL(url),1000);
+    }
+
+    downloadHtmlBtn.addEventListener('click',downloadCurrentHtml);
+
+    anaglyphBtn.addEventListener('click',()=>{
+      state.anaglyph=!state.anaglyph;
+      render();
+      status.textContent=state.anaglyph
+        ? '3D režim zapnut: použij červeno-azurové 3D brýle.'
+        : '3D režim vypnut.';
+    });
 
     fullscreenBtn.addEventListener('click',toggleFullscreen);
     document.addEventListener('fullscreenchange',updateFullscreenButton);
@@ -3369,7 +3659,7 @@
     function deepCloneLesson(v){ return v==null?v:JSON.parse(JSON.stringify(v)); }
     function roundLesson(v){ return Math.round((Number(v)||0)*100000)/100000; }
     function makeLessonSnapshot(){
-      return {sh:state.shape,crx:roundLesson(state.cameraRx),cry:roundLesson(state.cameraRy),crz:roundLesson(state.cameraRz),orx:roundLesson(state.objectRx),ory:roundLesson(state.objectRy),orz:roundLesson(state.objectRz),dx:roundLesson(state.depthX),dy:roundLesson(state.depthY),z:roundLesson(state.zoom),fv:state.activeFixedView||null,d:deepCloneLesson(state.drawings),p:deepCloneLesson(state.freePoints),s:deepCloneLesson(state.sectionHighlight),op:state.orthoPlaneSpec||'',ob:state.orthoShowBehind?1:0,os:state.orthoViewFlip?1:0};
+      return {sh:state.shape,crx:roundLesson(state.cameraRx),cry:roundLesson(state.cameraRy),crz:roundLesson(state.cameraRz),orx:roundLesson(state.objectRx),ory:roundLesson(state.objectRy),orz:roundLesson(state.objectRz),dx:roundLesson(state.depthX),dy:roundLesson(state.depthY),z:roundLesson(state.zoom),fv:state.activeFixedView||null,d:deepCloneLesson(state.drawings),p:deepCloneLesson(state.freePoints),s:deepCloneLesson(state.sectionHighlight),op:state.orthoPlaneSpec||'',ob:state.orthoShowBehind?1:0,os:state.orthoViewFlip?1:0,ag:state.anaglyph?1:0};
     }
     function updateRecordUi(){
       recordCount.textContent='Kroky: '+lessonState.steps.length;
@@ -3505,7 +3795,8 @@
         packLessonSection(s.s),
         s.op||'',
         s.ob?1:0,
-        s.os?1:0
+        s.os?1:0,
+        s.ag?1:0
       ];
     }
     function unpackLessonSnapshot(a){
@@ -3520,7 +3811,8 @@
         s:unpackLessonSection(a[13]),
         op:a[14]||'',
         ob:a[15]?1:0,
-        os:a[16]?1:0
+        os:a[16]?1:0,
+        ag:a[17]?1:0
       };
     }
 
@@ -3563,6 +3855,7 @@
         if(!packedEqual(prev[14],cur[14])){mask|=(1<<14);vals.push(cur[14]);}
         if(!packedEqual(prev[15],cur[15])){mask|=(1<<15);vals.push(cur[15]);}
         if(!packedEqual(prev[16],cur[16])){mask|=(1<<16);vals.push(cur[16]);}
+        if(!packedEqual(prev[17],cur[17])){mask|=(1<<17);vals.push(cur[17]);}
         diffs.push([mask,...vals]);
         prev=cur;
       }
@@ -3584,6 +3877,7 @@
         if(mask&(1<<14)) cur[14]=diff[j++];
         if(mask&(1<<15)) cur[15]=diff[j++];
         if(mask&(1<<16)) cur[16]=diff[j++];
+        if(mask&(1<<17)) cur[17]=diff[j++];
         out.push(unpackLessonSnapshot(cur));
       }
       return out;
@@ -3658,7 +3952,7 @@
       }
     }
     function applyLessonSnapshot(s){
-      stopAutoRotation();state.shape=s.sh||'cube';shapeSel.value=state.shape;state.cameraRx=Number(s.crx)||0;state.cameraRy=Number(s.cry)||0;state.cameraRz=Number(s.crz)||0;state.objectRx=Number(s.orx)||0;state.objectRy=Number(s.ory)||0;state.objectRz=Number(s.orz)||0;state.depthX=Number.isFinite(Number(s.dx))?Number(s.dx):DEPTH;state.depthY=Number.isFinite(Number(s.dy))?Number(s.dy):-DEPTH;state.zoom=Number.isFinite(Number(s.z))?Number(s.z):1;state.activeFixedView=s.fv||null;state.drawings=deepCloneLesson(s.d||[]);state.freePoints=deepCloneLesson(s.p||[]);state.sectionHighlight=deepCloneLesson(s.s||null);state.orthoPlaneSpec=s.op||'';state.orthoShowBehind=!(s.ob===0);state.orthoViewFlip=Boolean(s.os);orthoPlaneInput.value=state.orthoPlaneSpec;state.pending=[];state.selectedDrawings=[];state.selectedPointIndex=null;state.sectionMode=false;state.hover=null;state.hoverDirection=null;state.history=[];if(fixedViewSelect) fixedViewSelect.value=state.activeFixedView||'rightTop';updateSelectionUi();render();
+      stopAutoRotation();state.shape=s.sh||'cube';shapeSel.value=state.shape;state.cameraRx=Number(s.crx)||0;state.cameraRy=Number(s.cry)||0;state.cameraRz=Number(s.crz)||0;state.objectRx=Number(s.orx)||0;state.objectRy=Number(s.ory)||0;state.objectRz=Number(s.orz)||0;state.depthX=Number.isFinite(Number(s.dx))?Number(s.dx):DEPTH;state.depthY=Number.isFinite(Number(s.dy))?Number(s.dy):-DEPTH;state.zoom=Number.isFinite(Number(s.z))?Number(s.z):1;state.activeFixedView=s.fv||null;state.drawings=deepCloneLesson(s.d||[]);state.freePoints=deepCloneLesson(s.p||[]);state.sectionHighlight=deepCloneLesson(s.s||null);state.orthoPlaneSpec=s.op||'';state.orthoShowBehind=!(s.ob===0);state.orthoViewFlip=Boolean(s.os);state.anaglyph=Boolean(s.ag);orthoPlaneInput.value=state.orthoPlaneSpec;state.pending=[];state.selectedDrawings=[];state.selectedPointIndex=null;state.sectionMode=false;state.hover=null;state.hoverDirection=null;state.history=[];if(fixedViewSelect) fixedViewSelect.value=state.activeFixedView||'rightTop';updateSelectionUi();render();
     }
     function updateLessonPlayer(){ const n=lessonState.playbackSteps.length,i=lessonState.playbackIndex;lessonCounter.textContent=(i+1)+' / '+n;lessonPrev.disabled=i<=0;lessonNext.disabled=i>=n-1; }
     function showLessonStep(i){ if(!lessonState.playbackSteps.length)return;lessonState.playbackIndex=Math.max(0,Math.min(lessonState.playbackSteps.length-1,i));applyLessonSnapshot(lessonState.playbackSteps[lessonState.playbackIndex]);updateLessonPlayer();status.textContent='Postup: krok '+(lessonState.playbackIndex+1)+' z '+lessonState.playbackSteps.length+'.'; }
