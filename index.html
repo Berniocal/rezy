@@ -643,6 +643,8 @@
         <div class="stage-actions">
           <button type="button" id="undo">↶ Zpět</button>
           <button type="button" id="saveImageBtn">Uložit obrázek</button>
+          <!-- bernio-download-html -->
+          <button type="button" id="downloadHtmlBtn">⬇️ Stáhnout HTML</button>
           <button type="button" id="fullscreenBtn">⛶ Celá obrazovka</button>
         </div>
         <div id="status" class="vpp-status" aria-live="polite">Vyber těleso nebo rýsovací nástroj.</div>
@@ -765,6 +767,7 @@
     const sectionBtn=root.querySelector('#sectionBtn');
     const clearSectionBtn=root.querySelector('#clearSectionBtn');
     const saveImageBtn=root.querySelector('#saveImageBtn');
+    const downloadHtmlBtn=root.querySelector('#downloadHtmlBtn');
     const fullscreenBtn=root.querySelector('#fullscreenBtn');
     const autoRotateBtn=root.querySelector('#autoRotateBtn');
     const rotationSpeedInput=root.querySelector('#rotationSpeed');
@@ -1254,7 +1257,6 @@
       const rel=sub(local,plane.point);
       return {x:dot(rel,plane.u),y:dot(rel,plane.v),depth:dot(rel,plane.normal)};
     }
-
 
     function signedDistanceToOrthoPlane(local,plane){
       return dot(plane.normal,sub(local,plane.point));
@@ -2732,7 +2734,6 @@
       });
     });
 
-
     function cloneConstructionState(){
       return {
         pending:JSON.parse(JSON.stringify(state.pending)),
@@ -2791,7 +2792,6 @@
       setStatus();
       render();
     });
-
 
     const VIEW_STEP=0.08;
     const VIEW_BUTTON_STEP=VIEW_STEP*9;
@@ -3016,7 +3016,6 @@
       status.textContent='Zvýraznění řezu skryto.';
     });
 
-
     toggleHideBtn.addEventListener('click',()=>{
       const selected=selectedDrawingIndexes();
       const pi=state.selectedPointIndex;
@@ -3047,7 +3046,6 @@
           : 'Vybrané prvky jsou znovu zobrazené.';
       }
     });
-
 
     function saveCanvasAsJpg(){
       const clone=svg.cloneNode(true);
@@ -3102,6 +3100,19 @@
         status.textContent='Obrázek se nepodařilo uložit.';
       };
       img.src=url;
+    }
+
+    function downloadCurrentHtml(){
+      const html='<!doctype html>\n'+document.documentElement.outerHTML;
+      const blob=new Blob([html],{type:'text/html;charset=utf-8'});
+      const url=URL.createObjectURL(blob);
+      const a=document.createElement('a');
+      a.href=url;
+      a.download='rezy-teles.html';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(()=>URL.revokeObjectURL(url),1000);
     }
 
     async function toggleFullscreen(){
@@ -3182,6 +3193,7 @@
     orthoPlaneInput.addEventListener('keydown',e=>{ if(e.key==='Enter'){ e.preventDefault(); applyOrthoPlaneSpec(); }});
 
     saveImageBtn.addEventListener('click',saveCanvasAsJpg);
+    downloadHtmlBtn.addEventListener('click',downloadCurrentHtml);
 
     root.querySelector('#undo').addEventListener('click',()=>{
       if(state.history.length){
