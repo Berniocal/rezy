@@ -797,7 +797,7 @@
         <section class="vpp-group" id="rotationPanel">
           <div class="vpp-label">Otáčení tělesa</div>
           <div class="vpp-row" style="margin-bottom:8px">
-            <button type="button" id="mouseRotateBtn" aria-pressed="false">🔒 Otáčení myší zamčeno</button>
+            <button type="button" id="resetViewBtn">↺ Výchozí pohled</button>
           </div>
 
           <div class="control-subtitle" style="margin-top:0">Vlevo / vpravo</div>
@@ -846,7 +846,7 @@
     const status=root.querySelector('#status');
     const shapeSel=root.querySelector('#shape');
     const fixedViewSelect=root.querySelector('#fixedViewSelect');
-    const mouseRotateBtn=root.querySelector('#mouseRotateBtn');
+    const resetViewBtn=root.querySelector('#resetViewBtn');
     const drawColorInput=root.querySelector('#drawColor');
     const toggleHideBtn=root.querySelector('#toggleHideBtn');
     const pointRenameBox=root.querySelector('#pointRenameBox');
@@ -920,8 +920,9 @@
       freePoints:[],
       hover:null,
       hoverDirection:null,
-      mouseRotate:false,
+      mouseRotate:true,
       dragging:false,
+      dragMoved:false,
       last:null,
       history:[],
       animFrame:null,
@@ -2851,12 +2852,25 @@
       render();
     }
 
+    function syncMouseRotationMode(){
+      const enabled=state.tool===null && !state.sectionMode && !root.classList.contains('lesson-playback');
+      state.mouseRotate=enabled;
+      svg.dataset.orbit=String(enabled);
+      if(!enabled){
+        state.dragging=false;
+        state.dragMoved=false;
+        state.last=null;
+        svg.dataset.dragging='false';
+      }
+    }
+
     function setTool(tool){
       if(tool==='none') tool=null;
       if(state.pending.length && state.history.length){
         restoreConstructionState(state.history.pop());
       }
       state.tool=tool;
+      syncMouseRotationMode();
       state.pending=[];
       state.hoverDirection=null;
       if(tool!==null) closePointRenameEditor();
@@ -3125,20 +3139,15 @@
       });
     });
 
-    mouseRotateBtn.addEventListener('click',()=>{
-      state.mouseRotate=!state.mouseRotate;
-      mouseRotateBtn.textContent=state.mouseRotate
-        ? '🔓 Otáčení myší odemčeno'
-        : '🔒 Otáčení myší zamčeno';
-      mouseRotateBtn.setAttribute('aria-pressed',String(state.mouseRotate));
-      mouseRotateBtn.dataset.active=String(state.mouseRotate);
-      svg.dataset.orbit=String(state.mouseRotate);
-      if(!state.mouseRotate) svg.dataset.dragging='false';
-      state.hover=null;
-      renderOverlay();
-      status.textContent=state.mouseRotate
-        ? 'Otáčení myší odemčeno: táhni po ploše. Konstrukce se pohybuje spolu s tělesem.'
-        : 'Otáčení myší zamčeno: kliknutím do plochy můžeš zase rýsovat.';
+    resetViewBtn.addEventListener('click',()=>{
+      stopAutoRotation();
+      cancelViewAnimation();
+      resetObjectTransform();
+      resetViewToSchool();
+      state.activeFixedView='rightTop';
+      if(fixedViewSelect) fixedViewSelect.value='rightTop';
+      render();
+      status.textContent='Výchozí pohled obnoven.';
     });
 
     drawColorInput.addEventListener('input',()=>{
@@ -3244,6 +3253,7 @@
       }else{
         status.textContent='Zvýraznění řezu zrušeno.';
       }
+      syncMouseRotationMode();
       render();
     });
 
@@ -3494,6 +3504,7 @@
       state.sectionHighlight=null;
       state.sectionMode=false;
       sectionBtn.dataset.active='false';
+      syncMouseRotationMode();
       state.selectedDrawings=[];
       state.selectedPointIndex=null;
       updateSelectionUi();
@@ -3504,18 +3515,15 @@
     svg.addEventListener('pointerdown',e=>{
       const pt=coords(e);
 
-      if(state.mouseRotate && e.button===0){
-        stopAutoRotation();
-        clearFixedViewActive();
+      if(state.mouseRotate && state.tool===null && !state.sectionMode && e.button===0){
         state.dragging=true;
+        state.dragMoved=false;
         svg.dataset.dragging='true';
         state.last=pt;
         state.hover=null;
         state.hoverDirection=null;
         svg.setPointerCapture(e.pointerId);
-        status.textContent='Otáčím těleso myší…';
         renderOverlay();
-        return;
       }
 
       if(state.sectionMode){
@@ -3597,6 +3605,14 @@
         const dx=pt.x-state.last.x;
         const dy=pt.y-state.last.y;
 
+        if(!state.dragMoved && Math.hypot(dx,dy)<2) return;
+        if(!state.dragMoved){
+          state.dragMoved=true;
+          stopAutoRotation();
+          clearFixedViewActive();
+          status.textContent='Otáčím těleso myší…';
+        }
+
         // Orbit jako v GeoGebře:
         // vlevo/vpravo obíháme kolem svislé osy procházející středem tělesa,
         // nahoru/dolů těleso nakláníme kolem aktuální vodorovné osy.
@@ -3624,11 +3640,14 @@
 
     function stopMouseRotation(e){
       if(!state.dragging) return;
+      const moved=state.dragMoved;
       state.dragging=false;
+      state.dragMoved=false;
       svg.dataset.dragging='false';
       state.last=null;
       try{ svg.releasePointerCapture(e.pointerId); }catch(_){}
-      status.textContent='Otáčení myší odemčeno. Konstrukce zůstává navázaná na těleso.';
+      if(moved) status.textContent='Těleso pootočeno myší. Konstrukce zůstává navázaná na těleso.';
+      else setStatus();
     }
 
     svg.addEventListener('pointerup',stopMouseRotation);
@@ -3956,7 +3975,7 @@
     }
     function updateLessonPlayer(){ const n=lessonState.playbackSteps.length,i=lessonState.playbackIndex;lessonCounter.textContent=(i+1)+' / '+n;lessonPrev.disabled=i<=0;lessonNext.disabled=i>=n-1; }
     function showLessonStep(i){ if(!lessonState.playbackSteps.length)return;lessonState.playbackIndex=Math.max(0,Math.min(lessonState.playbackSteps.length-1,i));applyLessonSnapshot(lessonState.playbackSteps[lessonState.playbackIndex]);updateLessonPlayer();status.textContent='Postup: krok '+(lessonState.playbackIndex+1)+' z '+lessonState.playbackSteps.length+'.'; }
-    function enterLessonPlayback(steps){ lessonState.playback=true;lessonState.playbackSteps=steps;lessonState.playbackIndex=0;lessonState.recording=false;stopAutoRotation();state.mouseRotate=false;mouseRotateBtn.dataset.active='false';mouseRotateBtn.setAttribute('aria-pressed','false');mouseRotateBtn.textContent='🔒 Otáčení myší zamčeno';root.classList.add('lesson-playback');lessonPlayer.hidden=false;showLessonStep(0); }
+    function enterLessonPlayback(steps){ lessonState.playback=true;lessonState.playbackSteps=steps;lessonState.playbackIndex=0;lessonState.recording=false;stopAutoRotation();state.mouseRotate=false;state.dragging=false;state.dragMoved=false;state.last=null;svg.dataset.orbit='false';svg.dataset.dragging='false';root.classList.add('lesson-playback');lessonPlayer.hidden=false;showLessonStep(0); }
     async function loadLessonFromHash(){ const m=location.hash.match(/^#(?:p|postup)=(.+)$/);if(!m)return;try{const data=JSON.parse(await decodeLesson(m[1]));let steps;if(Array.isArray(data)&&data[0]===2)steps=expandCompactLesson(data);else if(data?.v===1&&Array.isArray(data.steps))steps=data.steps;else throw new Error('bad');if(!steps.length)throw new Error('empty');enterLessonPlayback(steps);}catch(_){status.textContent='Sdílený postup se nepodařilo načíst.';} }
 
     recordBtn.addEventListener('click',()=>lessonState.recording?stopLessonRecording():startLessonRecording());
